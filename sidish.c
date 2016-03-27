@@ -47,6 +47,8 @@
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
 
+#include "songdata.h"
+
 // SID Registers
 const short US_PER_TICK = 62; // 1,000,000 uS / 16,000 Hz
 
@@ -137,6 +139,12 @@ void print8int(int8_t value)
     }
     uint8_t ones = value - (tens * 10);
     put("0123456789"[ones]);
+}
+
+void print8hex(uint8_t value)
+{
+    put("0123456789ABCDEF"[value >> 4]);
+    put("0123456789ABCDEF"[value & 0x0F]);
 }
 
 void printint(int value)
@@ -538,6 +546,22 @@ int main (void)
         
         print(" Value: ");
         print8int( pgm_read_byte(&sineTable[i]));
+        print("\n");
+    }
+#endif
+
+#if 1
+    // prints title with ending line break
+    print("Dumping song data\n");
+
+    int i;
+    for (i = 0 ; i < song_size ; i++)
+    {
+        print("Count: ");
+        printint(i);
+        
+        print(" Value: 0x");
+        print8hex( pgm_read_byte(&song_start[i]));
         print("\n");
     }
 #endif

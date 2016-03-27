@@ -1,3 +1,5 @@
+SONG = Comic_Bakery.sng
+
 MCU_TARGET = atmega328p
 F_CPU = 16000000L
 
@@ -10,9 +12,10 @@ UPLOADER_FLAGS  = -c arduino
 UPLOADER_FLAGS += -p $(MCU_TARGET)
 UPLOADER_FLAGS += -P $(ARDUINO_PORT)
 
-QUIET = @
+QUIET = 
 
 #########################################################################
+SONGNAME = $(subst .,_,$(SONG))
 
 CC = avr-gcc
 OBJDUMP = avr-objdump
@@ -49,7 +52,8 @@ all: sidish.hex sidish.bin
 sidish.o: sidish.c Makefile
 	$(QUIET)$(CC) -c $(CFLAGS) -Wa,-adhlns=$(@:.o=.al) -o $@ $<
 
-sidish.elf: sidish.o
+sidish.elf: sidish.o songdata.o
+	@echo Linking $<
 	$(QUIET)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 sidish.hex: sidish.elf
@@ -61,6 +65,10 @@ sidish.bin: sidish.elf
 
 program: $(PROGRAM).hex
 	$(UPLOADER) $(UPLOADER_FLAGS) -U flash:w:$(PROGRAM).hex
+
+songdata.o: $(SONG)
+	@echo "Creating binary song data"
+	avr-objcopy --rename-section .data=.progmem.data,contents,alloc,load,readonly,data --redefine-sym _binary_$(SONGNAME)_start=song_start --redefine-sym _binary_$(SONGNAME)_end=song_end --redefine-sym _binary_$(SONGNAME)_size=song_size_sym -I binary -O elf32-avr $< $@
 
 clean:
 	rm -rf *.hex *.al *.bin *.elf *.i *.o *.s *~

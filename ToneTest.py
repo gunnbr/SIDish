@@ -45,10 +45,21 @@ class ToneGenerator():
     voiceSteps = [0,0,0,0]
     voiceErrorPercents = [0,0,0,0]
     voiceOn = [False, False, False, False]
+    noise = 0x42
 
-    orderlist = []
-    currentPattern = []
+    # One of these for each channel that provides the offset in the songdata
+    # to the orderlist for this channel
+    orderlistOffset = []
+
+    # The position in the orderlist for each channel
+    orderlistPosition = []
+
     songPosition = []
+
+    # The number of times remaining to repeat the current pattern before
+    # moving to the next one
+    patternRepeatCountdown = [0, 0, 0, 0]
+
     songStepCountdown = 1
     patternOffsets = []
     patternLength = []
@@ -148,32 +159,49 @@ class ToneGenerator():
         print "0x%02x:" % self.totalProgSteps,
 
         for channel in range(0,3):
-            if self.currentPattern[channel] == -1:
-                self.currentPattern[channel] = self.ReadByteAt(self.orderlist[channel])
-                print "Channel %d: RESTART - pattern %d" % (channel, self.currentPattern[channel])
-                self.songPosition[channel] = self.patternOffsets[self.currentPattern[channel]]
+            needNote = True
+            while needNote:
+                needNote = False
+                note = self.ReadByteAt(self.songPosition[channel])
+                print "   %02X" % note,
+                if note >= 0x60 and note <= 0xBC:
+                    note -= 0x60
+                    print "(%d)" % note,
+                    self.SetKey(channel, note)
+                elif note == 0xBE:
+                    self.KeyOff(channel)
+                    print "(OFF)",
+                elif note == 0xFF:
+                    print "(END)",
+                    needNote = True
+                    if self.patternRepeatCountdown[channel] > 0:
+                        self.patternRepeatCountdown[channel] -= 1
+                        patternNumber = self.ReadByteAt(self.orderlistOffset[channel] + self.orderlistPosition[channel])
+                        self.songPosition[channel] = self.patternOffsets[patternNumber]
+                        continue
 
-            note = self.ReadByteAt(self.songPosition[channel])
-            print "   %02X" % note,
-            if note >= 0x60 and note <= 0xBC:
-                note -= 0x60
-                print "(%d)" % note,
-                self.SetKey(channel, note)
-            elif note == 0xBE:
-                self.KeyOff(channel)
-                print "(OFF)",
-            elif note == 0xFF:
-                print "(END)",
-                self.currentPattern[channel] += 1
-                nextPattern = self.ReadByteAt(self.patternOffsets[self.currentPattern[channel]])
-                # TODO: Add handling for the repeat commands
-                if nextPattern == 0xFF:
-                    print "Channel %d: End of orderlist" % channel
-                    self.currentPattern[channel] += 1
-                    nextPattern = self.ReadByteAt(self.patternOffsets[self.currentPattern[channel]])
-                    print "  Next orderlist position %d" % nextPattern
-                    self.currentPattern[channel] = nextPattern
-                self.songPosition[channel] = self.patternOffsets[nextPattern]
+                    self.orderlistPosition[channel] += 1
+
+                    havePattern = False
+                    while not havePattern:
+                        # Get the pattern number from the current position
+                        patternNumber = self.ReadByteAt(self.orderlistOffset[channel] + self.orderlistPosition[channel])
+                        if patternNumber >= 0xE0 and patternNumber <= 0xFE:
+                            self.orderlistPosition[channel] += 1
+                            # TODO: Handle transpose codes!
+                        elif patternNumber >= 0xD0 and patternNumber <= 0xDF:
+                            self.orderlistPosition[channel] += 1
+                            repeatCount = patternNumber & 0x0F
+                            if repeatCount == 0:
+                                repeatCount = 16
+                            self.patternRepeatCountdown[channel] = repeatCount
+                        elif patternNumber == 0xFF:
+                            print "End of orderlist for channel %d" % channel
+                            return False
+                        else:
+                            havePattern = True
+
+                    self.songPosition[channel] = self.patternOffsets[patternNumber]
 
             # TODO: Handle all the rest of the interesting parts
             self.songPosition[channel] += 4
@@ -181,10 +209,18 @@ class ToneGenerator():
         print
 
         self.totalProgSteps += 1
-        if self.totalProgSteps >= 64:
-            return False
+        if self.totalProgSteps % 10 == 0:
+            print self.totalProgSteps
+
+        #if self.totalProgSteps >= 128:
+        #    return False
 
         return True
+
+    def noise(self):
+        bit = ((self.noise >> 0) ^ (self.noise >> 2) ^ (self.noise >> 3) ^ (self.noise >> 5)) & 1;
+        self.noise = (self.noise >> 1) | (bit << 15);
+        return self.noise & 0xFF
 
     def SetKey(self, channel, key):
         if channel >= 4:
@@ -308,25 +344,20 @@ class ToneGenerator():
         for i in range(0, subtunes):
             size = self.ReadByte()
             print "Subtune %d Orderlist 1 Size %d" % (i, size)
-            self.orderlist.append(self.offset)
-            self.currentPattern.append(-1)
-            self.songPosition.append(-1)
+            self.orderlistOffset.append(self.offset)
             for x in range(0, size + 1):
                 data = self.ReadByte()
                 print "  %d: 0x%02X" % (x, data)
             # generator.offset += size
             size = self.ReadByte()
-            self.orderlist.append(self.offset)
-            self.currentPattern.append(-1)
-            self.songPosition.append(-1)
+            self.orderlistOffset.append(self.offset)
             print "Subtune %d Orderlist 2 Size %d" % (i, size)
             self.offset += size + 1
             size = self.ReadByte()
-            self.orderlist.append(self.offset)
-            self.currentPattern.append(-1)
-            self.songPosition.append(-1)
+            self.orderlistOffset.append(self.offset)
             print "Subtune %d Orderlist 3 Size %d" % (i, size)
             self.offset += size + 1
+
 
         numInstruments = self.ReadByte()
         print "Number of instruments: %d" % numInstruments
@@ -366,6 +397,29 @@ class ToneGenerator():
             print "Pattern %d: Rows %d: Offset: %d" % (i, data, self.offset)
             self.patternOffsets.append(self.offset)
             self.offset += 4*data
+
+        # Initializa the song to get ready to play
+        for channel in range(0, 3):
+            # Start each channel at the first pattern in the order list
+            self.orderlistPosition.append(0)
+            havePattern = False
+            while not havePattern:
+                # Get the pattern number from the current position
+                patternNumber = self.ReadByteAt(self.orderlistOffset[channel] + self.orderlistPosition[channel])
+                if patternNumber >= 0xE0 and patternNumber <= 0xFE:
+                    self.orderlistPosition[channel] += 1
+                    # TODO: Handle transpose codes!
+                elif patternNumber >= 0xD0 and patternNumber <= 0xDF:
+                    self.orderlistPosition[channel] += 1
+                    repeatCount = patternNumber & 0x0F
+                    if repeatCount == 0:
+                        repeatCount = 16
+                    self.patternRepeatCountdown[channel] = repeatCount
+                else:
+                    havePattern = True;
+
+            # Start each channel at the first song position for each pattern
+            self.songPosition.append(self.patternOffsets[patternNumber])
 
     def ReadLong(self):
         data = struct.unpack(">I", self.songdata[self.offset:self.offset + 4])

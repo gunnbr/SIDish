@@ -62,7 +62,6 @@ class ToneGenerator():
 
     songStepCountdown = 1
     patternOffsets = []
-    patternLength = []
 
     programDelay = 0
     totalProgSteps = 0
@@ -162,7 +161,7 @@ class ToneGenerator():
             needNote = True
             while needNote:
                 needNote = False
-                note = self.ReadByteAt(self.songPosition[channel])
+                note = self.pgm_read_byte(self.songPosition[channel])
                 print "   %02X" % note,
                 if note >= 0x60 and note <= 0xBC:
                     note -= 0x60
@@ -176,7 +175,7 @@ class ToneGenerator():
                     needNote = True
                     if self.patternRepeatCountdown[channel] > 0:
                         self.patternRepeatCountdown[channel] -= 1
-                        patternNumber = self.ReadByteAt(self.orderlistOffset[channel] + self.orderlistPosition[channel])
+                        patternNumber = self.pgm_read_byte(self.orderlistOffset[channel] + self.orderlistPosition[channel])
                         self.songPosition[channel] = self.patternOffsets[patternNumber]
                         continue
 
@@ -185,7 +184,7 @@ class ToneGenerator():
                     havePattern = False
                     while not havePattern:
                         # Get the pattern number from the current position
-                        patternNumber = self.ReadByteAt(self.orderlistOffset[channel] + self.orderlistPosition[channel])
+                        patternNumber = self.pgm_read_byte(self.orderlistOffset[channel] + self.orderlistPosition[channel])
                         if patternNumber >= 0xE0 and patternNumber <= 0xFE:
                             self.orderlistPosition[channel] += 1
                             # TODO: Handle transpose codes!
@@ -370,7 +369,7 @@ class ToneGenerator():
                 data = self.ReadChar()
                 if data != '\0':
                     name += data
-            print "Instrument %d (%s): ASDR 0x%04X" % (i, name, adsr)
+            print "Instrument %d (%s): ADSR 0x%04X" % (i, name, adsr)
 
         size = self.ReadByte()
         print "Wavetable Size: %d" % size
@@ -393,7 +392,6 @@ class ToneGenerator():
 
         for i in range (0, numPatterns):
             data = self.ReadByte()
-            self.patternLength.append(data)
             print "Pattern %d: Rows %d: Offset: %d" % (i, data, self.offset)
             self.patternOffsets.append(self.offset)
             self.offset += 4*data
@@ -405,7 +403,7 @@ class ToneGenerator():
             havePattern = False
             while not havePattern:
                 # Get the pattern number from the current position
-                patternNumber = self.ReadByteAt(self.orderlistOffset[channel] + self.orderlistPosition[channel])
+                patternNumber = self.pgm_read_byte(self.orderlistOffset[channel] + self.orderlistPosition[channel])
                 if patternNumber >= 0xE0 and patternNumber <= 0xFE:
                     self.orderlistPosition[channel] += 1
                     # TODO: Handle transpose codes!
@@ -441,19 +439,15 @@ class ToneGenerator():
         self.offset += 1
         return data[0]
 
-    def ReadLongAt(self, at):
+    def pgm_read_dword(self, at):
         data = struct.unpack(">I", self.songdata[at:at + 4])
         return data[0]
 
-    def ReadShortAt(self, at):
+    def pgm_read_word(self, at):
         data = struct.unpack(">H", self.songdata[at:at + 2])
         return data[0]
 
-    def ReadCharAt(self, at):
-        data = struct.unpack("c", self.songdata[at:at + 1])
-        return data[0]
-
-    def ReadByteAt(self, at):
+    def pgm_read_byte(self, at):
         data = struct.unpack("B", self.songdata[at:at + 1])
         return data[0]
 

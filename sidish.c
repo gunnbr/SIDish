@@ -623,100 +623,17 @@ void KeyOff(uint8_t channel)
     voiceOn[channel] = 0;
 }
 
+#define TEST_MODE (1)
+
 int main (void)
 {
     setup();
 
+#if TEST_MODE
     uint8_t key = 40;
     
     SetKey(0, key);
 
-#if 0
-    // prints title with ending line break
-    print("Dumping sine table\n");
-
-    int i;
-    for (i = 0 ; i < sizeof(sineTable) ; i++)
-    {
-        print("Count: ");
-        printint(i);
-        
-        print(" Value: ");
-        print8int( pgm_read_byte(&sineTable[i]));
-        print("\n");
-    }
-#endif
-
-#if 0
-    // prints title with ending line break
-    print("Dumping song data\n");
-
-    const char *data = song_start;
-    
-    int i;
-    for (i = 0 ; i < song_size ; i++)
-    {
-        print("Count: ");
-        printint(i);
-        
-        print(" Value: 0x");
-        print8hex( pgm_read_byte(data++));
-        print("\n");
-    }
-#endif
-
-#if 0
-    unsigned long v1count = 0;
-    uint8_t v1errorpercent = 0;
-    uint8_t nextOutputValue = 0;
-    int16_t outputValue = 0;
-    int x;
-
-    for (x = 0 ; x < 300 ; x++)
-    {
-        printint(x);
-        print(": ");
-        
-        v1count += VOICE1_STEPS;
-        v1errorpercent += voice1errorsteps;
-        if (v1errorpercent >= 100)
-        {
-            voice1count++;
-            v1errorpercent -= 100;
-        }
-        print(" Error%: ");
-        printint(v1errorpercent);
-        
-        if (v1count >= sizeof(sineTable))
-        {
-            v1count -= sizeof(sineTable);
-        }
-        print(" Count: ");
-        printint(v1count);
-        outputValue =  (int8_t)pgm_read_byte(&sineTable[v1count]);
-        print(" Output: ");
-        printint(outputValue);
-
-        // Prepare output
-        outputValue += 128;
-        if (outputValue < 0)
-        {
-            outputValue = 0;
-        }
-        else if (outputValue > 255)
-        {
-            outputValue = 255;
-        }
-        print(" +128: ");
-        printint(outputValue);
-
-        nextOutputValue = (uint8_t)outputValue;
-        print(" Next: ");
-        printint(nextOutputValue);
-        print("\n");
-    }
-#endif
-    
     while (1)
     {
         if (UCSR0A & (1<<RXC0))
@@ -769,4 +686,9 @@ int main (void)
             print("\n");
         }
     }
+#else
+    
+    while(1);
+    
+#endif
 }

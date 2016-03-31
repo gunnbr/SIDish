@@ -48,6 +48,7 @@
 #include <avr/interrupt.h>
 
 #include "songdata.h"
+#include "tables.h"
 
 // SID Registers
 const short US_PER_TICK = 62; // 1,000,000 uS / 16,000 Hz
@@ -100,6 +101,8 @@ uint8_t voice1key = 0;
 #define DAC_CLK  (PD3)
 #define DAC_DATA (PD4)
 #define DAC_LDAC (PD5)
+
+void InitializeSong(void);
 
 void print(char *message)
 {
@@ -259,9 +262,12 @@ void setup()
 
     // Serup serial for 8N1
     UCSR0C = 6; 
+
+    InitializeSong();
     
     sei();
 }
+
 
 uint8_t tone1on = 1;
 uint8_t tone2on = 0;
@@ -271,15 +277,210 @@ short programcount = 267;
 
 uint8_t gNextOutputValue = 0;
 
-// Based on 16 kHz bitrate and 1024 table size
-const uint16_t FREQUENCY_TABLE[] PROGMEM = { 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 7, 7, 7, 8, 8, 9, 9, 10, 11, 11, 12, 13, 14, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 28, 29, 31, 33, 35, 37, 39, 42, 44, 47, 50, 53, 56, 59, 63, 66, 70, 75, 79, 84, 89, 94, 100, 106, 112, 119, 126, 133, 141, 150, 159, 168, 178, 189, 200, 212, 225, 238, };
+// Pointer to the start of each orderlist.
+const char *orderlist[3];
 
-// Based on 16 kHz bitrate and 1024 table size
-const uint8_t ERRORPERCENT_TABLE[] PROGMEM = { 66, 76, 86, 97, 9, 21, 34, 48, 63, 79, 95, 13, 32, 52, 72, 95, 18, 43, 69, 97, 27, 58, 91, 27, 64, 4, 45, 90, 37, 86, 39, 95, 54, 17, 83, 54, 28, 8, 91, 80, 74, 73, 79, 91, 9, 35, 67, 8, 57, 16, 83, 60, 48, 47, 58, 82, 19, 70, 35, 17, 15, 32, 66, 21, 97, 95, 17, 64, 38, 40, 71, 35, 31, 64, 33, 43, 95, 91, 35, 29, 76, 80, 43, 70, 63, 28, 67, };
+// Pointer to the start of each pattern.
+// TODO: Optimize memory usage by reducing this value?
+const char *pattern[256];
 
-// 1024 values ranged -32 to 31
-const int8_t sineTable[] PROGMEM = { 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13, 14, 14, 14, 14, 14, 14, 15, 15, 15, 15, 15, 15, 16, 16, 16, 16, 16, 16, 17, 17, 17, 17, 17, 17, 18, 18, 18, 18, 18, 18, 19, 19, 19, 19, 19, 19, 19, 20, 20, 20, 20, 20, 20, 21, 21, 21, 21, 21, 21, 21, 22, 22, 22, 22, 22, 22, 22, 23, 23, 23, 23, 23, 23, 23, 23, 24, 24, 24, 24, 24, 24, 24, 24, 25, 25, 25, 25, 25, 25, 25, 25, 26, 26, 26, 26, 26, 26, 26, 26, 26, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 32, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 26, 26, 26, 26, 26, 26, 26, 26, 26, 25, 25, 25, 25, 25, 25, 25, 25, 24, 24, 24, 24, 24, 24, 24, 24, 23, 23, 23, 23, 23, 23, 23, 23, 22, 22, 22, 22, 22, 22, 22, 21, 21, 21, 21, 21, 21, 21, 20, 20, 20, 20, 20, 20, 19, 19, 19, 19, 19, 19, 19, 18, 18, 18, 18, 18, 18, 17, 17, 17, 17, 17, 17, 16, 16, 16, 16, 16, 16, 15, 15, 15, 15, 15, 15, 14, 14, 14, 14, 14, 14, 13, 13, 13, 13, 13, 12, 12, 12, 12, 12, 12, 11, 11, 11, 11, 11, 10, 10, 10, 10, 10, 10, 9, 9, 9, 9, 9, 8, 8, 8, 8, 8, 7, 7, 7, 7, 7, 7, 6, 6, 6, 6, 6, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -2, -2, -2, -2, -2, -3, -3, -3, -3, -3, -4, -4, -4, -4, -4, -5, -5, -5, -5, -5, -6, -6, -6, -6, -6, -7, -7, -7, -7, -7, -7, -8, -8, -8, -8, -8, -9, -9, -9, -9, -9, -10, -10, -10, -10, -10, -10, -11, -11, -11, -11, -11, -12, -12, -12, -12, -12, -12, -13, -13, -13, -13, -13, -14, -14, -14, -14, -14, -14, -15, -15, -15, -15, -15, -15, -16, -16, -16, -16, -16, -16, -17, -17, -17, -17, -17, -17, -18, -18, -18, -18, -18, -18, -19, -19, -19, -19, -19, -19, -19, -20, -20, -20, -20, -20, -20, -21, -21, -21, -21, -21, -21, -21, -22, -22, -22, -22, -22, -22, -22, -23, -23, -23, -23, -23, -23, -23, -23, -24, -24, -24, -24, -24, -24, -24, -24, -25, -25, -25, -25, -25, -25, -25, -25, -26, -26, -26, -26, -26, -26, -26, -26, -26, -27, -27, -27, -27, -27, -27, -27, -27, -27, -27, -28, -28, -28, -28, -28, -28, -28, -28, -28, -28, -28, -29, -29, -29, -29, -29, -29, -29, -29, -29, -29, -29, -29, -29, -29, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -32, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -31, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -29, -29, -29, -29, -29, -29, -29, -29, -29, -29, -29, -29, -29, -29, -28, -28, -28, -28, -28, -28, -28, -28, -28, -28, -28, -27, -27, -27, -27, -27, -27, -27, -27, -27, -27, -26, -26, -26, -26, -26, -26, -26, -26, -26, -25, -25, -25, -25, -25, -25, -25, -25, -24, -24, -24, -24, -24, -24, -24, -24, -23, -23, -23, -23, -23, -23, -23, -23, -22, -22, -22, -22, -22, -22, -22, -21, -21, -21, -21, -21, -21, -21, -20, -20, -20, -20, -20, -20, -19, -19, -19, -19, -19, -19, -19, -18, -18, -18, -18, -18, -18, -17, -17, -17, -17, -17, -17, -16, -16, -16, -16, -16, -16, -15, -15, -15, -15, -15, -15, -14, -14, -14, -14, -14, -14, -13, -13, -13, -13, -13, -12, -12, -12, -12, -12, -12, -11, -11, -11, -11, -11, -10, -10, -10, -10, -10, -10, -9, -9, -9, -9, -9, -8, -8, -8, -8, -8, -7, -7, -7, -7, -7, -7, -6, -6, -6, -6, -6, -5, -5, -5, -5, -5, -4, -4, -4, -4, -4, -3, -3, -3, -3, -3, -2, -2, -2, -2, -2, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, };
+// The position in the orderlist for each channel
+uint8_t orderlistPosition[3];
 
+// The number of times remaining to repeat the current pattern before
+// moving to the next one
+uint8_t patternRepeatCountdown[3];
+
+// Pointer to the current position in the song data for each channel
+const char *songPosition[3];
+
+void InitializeSong(void)
+{
+    const char *data = song_start;
+
+    print("\n\n\n******** Initializing *******\n\n");
+    
+    uint32_t header = pgm_read_dword(data);
+    if (header != 0x35535447)
+    {
+        print("Header is not from GoatTracker\n");
+        return;
+    }
+    data += 4;
+    
+    print("Found GoatTracker header\n");
+
+    int i;
+    
+    char name[32];
+    for (i = 0 ; i < 32 ; i++)
+    {
+        name[i] = pgm_read_byte(data++);
+    }
+    print("Song Name: ");
+    print(name);
+    print("\n");
+    
+    for (i = 0 ; i < 32 ; i++)
+    {
+        name[i] = pgm_read_byte(data++);
+    }
+    print("   Author: ");
+    print(name);
+    print("\n");
+
+    for (i = 0 ; i < 32 ; i++)
+    {
+        name[i] = pgm_read_byte(data++);
+    }
+    print("Copyright: ");
+    print(name);
+    print("\n");
+
+    uint8_t subtunes = pgm_read_byte(data++);
+    print("# subtunes: ");
+    print8int(subtunes);
+    print("\n");
+
+    for(i = 0 ; i < subtunes ; i++)
+    {
+        // TODO: Handle multiple subtunes
+        uint8_t size = pgm_read_byte(data++);
+        orderlist[0] = data;
+        data += size + 1;
+
+        print("Subtune ");
+        print8int(i);
+        print(" Orderlist 1 Size ");
+        print8int(size);
+        print("\n");
+
+        size = pgm_read_byte(data++);
+        orderlist[1] = data;
+        data += size + 1;
+
+        print("Subtune ");
+        print8int(i);
+        print(" Orderlist 2 Size ");
+        print8int(size);
+        print("\n");
+
+        size = pgm_read_byte(data++);
+        orderlist[2] = data;
+        data += size + 1;
+        
+        print("Subtune ");
+        print8int(i);
+        print(" Orderlist 3 Size ");
+        print8int(size);
+        print("\n");
+    }
+
+    uint8_t numInstruments = pgm_read_byte(data++);
+    print("Number of instruments: ");
+    print8int(numInstruments);
+    print("\n");
+
+    for (i = 0 ; i < numInstruments ; i++)
+    {
+        uint8_t ad = pgm_read_byte(data++);
+        uint8_t sr = pgm_read_byte(data++);
+        data += 7;
+        for (uint8_t x = 0 ; x < 16 ; x++)
+        {
+            name[x] = pgm_read_byte(data++);
+        }
+        print("Instrument ");
+        print8int(i);
+        print(" (");
+        print(name);
+        print(") ");
+        print(": ADSR 0x");
+        print8hex(ad);
+        print8hex(sr);
+        print("\n");
+    }
+
+    uint8_t size = pgm_read_byte(data++);
+    print("Wavetable Size: ");
+    print8int(size);
+    print("\n");
+    data += size * 2;
+
+    size = pgm_read_byte(data++);
+    print("Pulsetable Size: ");
+    print8int(size);
+    print("\n");
+    data += size * 2;
+
+    size = pgm_read_byte(data++);
+    print("Filtertable Size: ");
+    print8int(size);
+    print("\n");
+    data += size * 2;
+
+    size = pgm_read_byte(data++);
+    print("Speedtable Size: ");
+    print8int(size);
+    print("\n");
+    data += size * 2;
+
+    uint8_t numPatterns = pgm_read_byte(data++);
+    print("Number Patterns: ");
+    print8int(numPatterns);
+    print("\n");
+
+    for(i = 0 ; i < numPatterns ; i++)
+    {
+        uint8_t length = pgm_read_byte(data++);
+        pattern[i] = data;
+        
+        print("Pattern ");
+        print8int(i);
+        print(": Rows ");
+        print8int(length);
+        print("\n");
+
+        data += 4*length;
+    }
+
+    // Initializa the song to get ready to play
+    for (uint8_t channel = 0 ; channel < 3 ; channel++)
+    {
+        // Start each channel at the first pattern in the order list
+        orderlistPosition[i] = 0;
+
+        uint8_t patternNumber;
+        do
+        {
+            // Get the pattern number from the current position
+            patternNumber = pgm_read_byte(orderlist[channel] + orderlistPosition[channel]);
+            if (patternNumber >= 0xD0 && patternNumber <= 0xDF)
+            {
+                orderlistPosition[channel]++;
+                uint8_t repeatCount = patternNumber & 0x0F;
+                if (repeatCount == 0)
+                {
+                    repeatCount = 16;
+                }
+                patternRepeatCountdown[channel] = repeatCount;
+            }
+            else if (patternNumber >= 0xE0 && patternNumber <= 0xFE)
+            {
+                orderlistPosition[channel]++;
+                // TODO: Handle transpose codes!
+            }
+        } while (patternNumber >= 0xD0);
+        
+        // Start each channel at the first song position for each pattern
+        songPosition[channel] = pattern[patternNumber];
+        print("Channel ");
+        print8int(channel);
+        print(" Initial Pattern: ");
+        print8int(patternNumber);
+        print("\n");
+    }
+}
 
 #if USE_WAVESHIELD
 
@@ -550,10 +751,12 @@ int main (void)
     }
 #endif
 
-#if 1
+#if 0
     // prints title with ending line break
     print("Dumping song data\n");
 
+    const char *data = song_start;
+    
     int i;
     for (i = 0 ; i < song_size ; i++)
     {
@@ -561,7 +764,7 @@ int main (void)
         printint(i);
         
         print(" Value: 0x");
-        print8hex( pgm_read_byte(&song_start[i]));
+        print8hex( pgm_read_byte(data++));
         print("\n");
     }
 #endif

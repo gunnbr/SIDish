@@ -84,13 +84,6 @@ unsigned char VOICE1_ATTACKDECAY = 0;
 // 8 BITS
 unsigned char VOICE1_SUSTAINRELEASE = 0;
 
-// Synthesizer parameters
-unsigned long voice1count = 0;
-unsigned long voice2count = 0;
-unsigned long voice3count = 0;
-uint8_t voice1errorsteps = 0;
-uint8_t voice1errorpercent = 0;
-uint8_t voice1key = 0;
 
 // For Adafruit WaveShield
 // pin 2 is DAC chip select (PD2)
@@ -103,6 +96,7 @@ uint8_t voice1key = 0;
 #define DAC_LDAC (PD5)
 
 void InitializeSong(void);
+void programStep(void);
 
 void print(char *message)
 {
@@ -268,10 +262,6 @@ void setup()
     sei();
 }
 
-
-uint8_t tone1on = 1;
-uint8_t tone2on = 0;
-uint8_t tone3on = 0;
 
 short programcount = 267;
 
@@ -542,6 +532,15 @@ inline void DacSend(uint8_t data)
 uint32_t totalTicks = 0;
 uint8_t voice1erroron = 1;
 
+#define VBI_COUNT (3)
+
+uint16_t channelCounts[4];
+uint16_t channelSteps[4];
+uint8_t errorPercent[4];
+uint8_t errorSteps[4];
+uint8_t voiceOn[4];
+uint8_t vbiCount = VBI_COUNT;
+
 // This is the audio output interrupt that gets called
 // at the audio output bitrate
 ISR(TIMER0_COMPA_vect) 
@@ -556,175 +555,72 @@ ISR(TIMER0_COMPA_vect)
 
   int outputValue = 0;
 
-  // VOICE 1 - sine wave
-  if (tone1on)
+  for (uint8_t channel = 0 ; channel < 4 ; channel++)
   {
-    voice1count += VOICE1_STEPS;
-    voice1errorpercent += voice1errorsteps;
-    if (voice1errorpercent >= 100)
-    {
-        if (voice1erroron)
-        {
-            voice1count++;
-        }
-        voice1errorpercent -= 100;
-    }
-    if (voice1count >= sizeof(sineTable))
-    {
-      voice1count -= sizeof(sineTable);
-    }
-    outputValue =  (int8_t)pgm_read_byte(&sineTable[voice1count]);
-  }
-  
-  // VOICE 2 - sine wave
-  if (tone2on)
-  {
-    voice2count += VOICE2_STEPS;
-    if (voice2count >= sizeof(sineTable))
-    {
-      voice2count -= sizeof(sineTable);
-    }
-    outputValue +=  (int8_t)pgm_read_byte(&sineTable[voice2count]);
-  }
-  
-  // VOICE 3 - sine wave
-  if (tone3on)
-  {
-    voice3count += VOICE3_STEPS;
-    if (voice3count >= sizeof(sineTable))
-    {
-      voice3count -= sizeof(sineTable);
-    }
-    outputValue +=  (int8_t)pgm_read_byte(&sineTable[voice3count]);
-  }
-  
-  // Prepare output
+      channelCounts[channel] += channelSteps[channel];
+      errorPercent[channel] += errorSteps[channel];
+      if (errorPercent[channel] >= 100)
+      {
+          channelCounts[channel]++;
+          errorPercent[channel] -= 100;
+      }
+      
+      if (channelCounts[channel] >= sizeof(sineTable))
+      {
+          channelCounts[channel] -= sizeof(sineTable);
+      }
+
+      if (voiceOn[channel])
+      {
+          outputValue += (int8_t)pgm_read_byte(&sineTable[channelCounts[channel]]);
+      }
+  }  
+
+  // Scale -128 to 128 values to 0 to 255
   outputValue += 128;
+
   if (outputValue < 0)
   {
-    outputValue = 0;
+      outputValue = 0;
   }
   else if (outputValue > 255)
   {
-    outputValue = 255;
+      outputValue = 255;
   }
 
-#if 0
-  totalTicks++;
-  switch(totalTicks)
+  vbiCount--;
+  if (vbiCount == 0)
   {
-    case 1:
-      tone1on = 1;
-      break;
-    case 15500:
-      tone1on = 0;
-      break;
-    case 16500:
-      tone2on = 1;
-      break;
-    case 31500:
-      tone2on = 0;
-      break;
-    case 32500:
-      tone3on = 1;
-      break;
-    case 47500:
-      tone3on = 0;
-      break;
-    case 48500:
-      tone1on = 1;
-      tone2on = 1;
-      tone3on = 1;
-      break;
-    case 63500:
-      tone1on = 0;
-      tone2on = 0;
-      tone3on = 0;
-      break;
-    case 72500:
-      totalTicks = 0;
-      break;
+      vbiCount = VBI_COUNT;
+
+      // Enable interrupts, then go through the program step.
+      // This should allow the ProgramStep routine to be
+      // interrupted by the ISR again if it takes too long,
+      // but that's okay.
+      // TODO: Test to see the maximum time the ProgramStep routine can take
+      sei();
+      programStep();
   }
-#endif
+
   gNextOutputValue = (uint8_t)outputValue;
-  
-#if 0
-  programcount--;
-  if (programcount == 0)
-  {
-    programcount = 267;
-    programStep();
-  }
-#endif
 }
-
-uint8_t dutyUp = 0;
-
-short beatcount = 60;
-uint8_t state = 0;
 
 void programStep()
 {
-  beatcount--;
-  if (beatcount == 0)
-  {
-    beatcount = 60;
-    state++;
-    switch (state)
-    {
-      case 0:
-        VOICE1_CONTROL = 1;
-        VOICE2_CONTROL = 0;
-        VOICE3_CONTROL = 0;
-        break;
-      case 1:
-        VOICE1_CONTROL = 0;
-        VOICE2_CONTROL = 1;
-        VOICE3_CONTROL = 0;
-        break;
-      case 2:
-        VOICE1_CONTROL = 0;
-        VOICE2_CONTROL = 0;
-        VOICE3_CONTROL = 1;
-        break;
-      case 3:
-        VOICE1_CONTROL = 1;
-        VOICE2_CONTROL = 1;
-        VOICE3_CONTROL = 1;
-        break;
-      case 5:
-        state = 0;
-        break;
-    }
-  }
-
-#if 0
-  if (dutyUp)
-  {
-    VOICE1_DUTY += 5;
-    if (VOICE1_DUTY > 128)
-    {
-      dutyUp = 0;
-    }
-    else
-    {
-      VOICE1_DUTY -= 5;
-      if (VOICE1_DUTY < 5)
-      {
-        dutyUp = 1;
-      }
-    }
-  }
-#endif
 }
 
-void SetKey(uint8_t key)
+void SetKey(uint8_t channel, uint8_t key)
 {
-    VOICE1_STEPS = pgm_read_word(&FREQUENCY_TABLE[key]);
-    voice1errorsteps = pgm_read_byte(&ERRORPERCENT_TABLE[key]);
-    voice1errorpercent = 0;
-    voice1count = 0;
-    voice1key = key;
+    channelSteps[channel] = pgm_read_word(&FREQUENCY_TABLE[key]);
+    errorSteps[channel] = pgm_read_byte(&ERRORPERCENT_TABLE[key]);
+    channelCounts[channel] = 0;
+    errorPercent[channel] = 0;
+    voiceOn[channel] = 1;
+}
+
+void KeyOff(uint8_t channel)
+{
+    voiceOn[channel] = 0;
 }
 
 int main (void)
@@ -733,7 +629,7 @@ int main (void)
 
     uint8_t key = 40;
     
-    SetKey(key);
+    SetKey(0, key);
 
 #if 0
     // prints title with ending line break
@@ -833,7 +729,7 @@ int main (void)
                 if (key < 83)
                 {
                     key++;
-                    SetKey(key);
+                    SetKey(0, key);
                 }
             }
             else if (command == 31 || command == 'j')
@@ -842,7 +738,7 @@ int main (void)
                 if (key > 0)
                 {
                     key--;
-                    SetKey(key);
+                    SetKey(0, key);
                 }
             }
             else if (command == 32)

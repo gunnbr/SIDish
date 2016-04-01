@@ -43,6 +43,7 @@
 //   https://developer.mbed.org/users/4180_1/notebook/using-a-speaker-for-audio-output/
 
 #define USE_WAVESHIELD (1)
+#define TEST_MODE (0)
 
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
@@ -51,7 +52,6 @@
 #include "tables.h"
 
 // SID Registers
-const short US_PER_TICK = 62; // 1,000,000 uS / 16,000 Hz
 
 // 16 bits
 // Technically the ticks per cycle, not frequency
@@ -59,14 +59,9 @@ const short US_PER_TICK = 62; // 1,000,000 uS / 16,000 Hz
 // Key 47 (G4): 392 Hz = 2551 (actually 388 Hz)
 // Key 44 (E4): 329 Hz = 3032 (actually 327 Hz)
 // Key 40 (C4): 261 Hz = 3822 (actually 259.325 Hz)
-
 short VOICE1_FREQUENCY = 3822;
 short VOICE2_FREQUENCY = 3032;
 short VOICE3_FREQUENCY = 2551;
-
-uint16_t VOICE1_STEPS = 16;
-uint16_t VOICE2_STEPS = 21;
-uint16_t VOICE3_STEPS = 25;
 
 // 12 bits in SID, only 8 bits here
 short VOICE1_DUTY = 0x80;
@@ -261,9 +256,6 @@ void setup()
     
     sei();
 }
-
-
-short programcount = 267;
 
 uint8_t gNextOutputValue = 0;
 
@@ -530,16 +522,18 @@ inline void DacSend(uint8_t data)
 #endif
 
 uint32_t totalTicks = 0;
-uint8_t voice1erroron = 1;
+uint8_t erroron = 1;
 
-#define VBI_COUNT (3)
+#define VBI_COUNT (16000 / 50)
+#define SONG_STEP_COUNT (3) // Essentially the tempo
 
 uint16_t channelCounts[4];
 uint16_t channelSteps[4];
 uint8_t errorPercent[4];
 uint8_t errorSteps[4];
 uint8_t voiceOn[4];
-uint8_t vbiCount = VBI_COUNT;
+uint16_t vbiCount = VBI_COUNT;
+uint8_t songStepCountdown = 1;
 
 // This is the audio output interrupt that gets called
 // at the audio output bitrate
@@ -553,41 +547,40 @@ ISR(TIMER0_COMPA_vect)
   digitalWrite(4, LOW);
 #endif
 
-  int outputValue = 0;
+  int8_t outputValue = 0;
 
-  for (uint8_t channel = 0 ; channel < 4 ; channel++)
+  // 4 channels are actually supported, but since GoatTracker
+  // only supports 3 and I need more cycles, only process 3
+  // of them.
+  
+  for (uint8_t channel = 0 ; channel < 3 ; channel++)
   {
-      channelCounts[channel] += channelSteps[channel];
-      errorPercent[channel] += errorSteps[channel];
-      if (errorPercent[channel] >= 100)
-      {
-          channelCounts[channel]++;
-          errorPercent[channel] -= 100;
-      }
-      
-      if (channelCounts[channel] >= sizeof(sineTable))
-      {
-          channelCounts[channel] -= sizeof(sineTable);
-      }
-
       if (voiceOn[channel])
       {
+          channelCounts[channel] += channelSteps[channel];
+          errorPercent[channel] += errorSteps[channel];
+          if (errorPercent[channel] >= 100)
+          {
+#if TEST_MODE
+              if (erroron)
+#endif
+              channelCounts[channel]++;
+              errorPercent[channel] -= 100;
+          }
+          
+          if (channelCounts[channel] >= sizeof(sineTable))
+          {
+              channelCounts[channel] -= sizeof(sineTable);
+          }
+          
           outputValue += (int8_t)pgm_read_byte(&sineTable[channelCounts[channel]]);
       }
   }  
 
   // Scale -128 to 128 values to 0 to 255
-  outputValue += 128;
+  gNextOutputValue = (uint8_t)((int16_t)outputValue + 128);
 
-  if (outputValue < 0)
-  {
-      outputValue = 0;
-  }
-  else if (outputValue > 255)
-  {
-      outputValue = 255;
-  }
-
+#if !TEST_MODE
   vbiCount--;
   if (vbiCount == 0)
   {
@@ -601,12 +594,7 @@ ISR(TIMER0_COMPA_vect)
       sei();
       programStep();
   }
-
-  gNextOutputValue = (uint8_t)outputValue;
-}
-
-void programStep()
-{
+#endif
 }
 
 void SetKey(uint8_t channel, uint8_t key)
@@ -623,7 +611,97 @@ void KeyOff(uint8_t channel)
     voiceOn[channel] = 0;
 }
 
-#define TEST_MODE (1)
+void programStep()
+{
+    songStepCountdown--;
+    if (songStepCountdown > 0)
+    {
+        // TODO Process effects here
+        return;
+    }
+
+    songStepCountdown = SONG_STEP_COUNT;
+
+    for(uint8_t channel = 0; channel < 3 ; channel++)
+    {
+        uint8_t note;
+        
+        do
+        {
+            note = pgm_read_byte(songPosition[channel]);
+            if (note >= 0x60 && note <= 0xBC)
+            {
+                note -= 0x60;
+                SetKey(channel, note);
+            }
+            else if (note == 0xBE)
+            {
+                KeyOff(channel);
+            }
+            else if (note == 0xFF)
+            {
+                if (patternRepeatCountdown[channel] > 0)
+                {
+                    patternRepeatCountdown[channel] -= 1;
+                    uint8_t patternNumber = pgm_read_byte(orderlist[channel] + orderlistPosition[channel]);
+                    songPosition[channel] = pattern[patternNumber];
+                    continue;
+                }
+                
+                orderlistPosition[channel]++;
+
+                uint8_t patternNumber;
+                do
+                {
+                    // Get the pattern number from the current position
+                    patternNumber = pgm_read_byte(orderlist[channel] + orderlistPosition[channel]);
+
+                    if (patternNumber >= 0xD0 && patternNumber <= 0xDF)
+                    {
+                        orderlistPosition[channel]++;
+                        uint8_t repeatCount = patternNumber & 0x0F;
+                        if (repeatCount == 0)
+                        {
+                            repeatCount = 16;
+                        }
+                        patternRepeatCountdown[channel] = repeatCount;
+                    }
+                    else if (patternNumber >= 0xE0 && patternNumber <= 0xFE)
+                    {
+                        orderlistPosition[channel]++;
+                        // TODO: Handle transpose codes!
+                    }
+                    else if (patternNumber == 0xFF)
+                    {
+                        orderlistPosition[channel]++;
+                        patternNumber = pgm_read_byte(orderlist[channel] + orderlistPosition[channel]);
+
+                        print("END ");
+                        print8int(channel);
+                        print(" Next ");
+                        print8int(patternNumber);
+                        print("\n");
+
+                        orderlistPosition[channel] = patternNumber;
+                    }
+                    else
+                    {
+                        print("Next ");
+                        print8int(channel);
+                        print(": ");
+                        print8int(patternNumber);
+                        print("\n");
+                    }
+                    
+                    songPosition[channel] = pattern[patternNumber];
+                } while (patternNumber >= 0xD0);
+            }
+        } while (note == 0xFF);
+
+        // TODO: Handle all the rest of the interesting parts
+        songPosition[channel] += 4;
+    }
+}
 
 int main (void)
 {
@@ -661,7 +739,7 @@ int main (void)
             else if (command == 32)
             {
                 print(" ERR: ");
-                voice1erroron = !voice1erroron;
+                erroron = !erroron;
             }
             else
             {
@@ -674,7 +752,7 @@ int main (void)
             print8int(key);
             print(" Err: ");
 
-            if (voice1erroron)
+            if (erroron)
             {
                 print("ON");
             }

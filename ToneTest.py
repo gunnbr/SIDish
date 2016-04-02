@@ -252,12 +252,13 @@ class ToneGenerator():
         self.fp.write("WAVE")
 
         self.fp.write("fmt ")
-        # Chunk size (2 bytes)
+
+        # Chunk size (4 bytes)
         value = 16
         bytesout = struct.pack("<L", value)
         self.fp.write(bytesout)
 
-        # Format code (4 bytes)
+        # Format code (2 bytes)
         value = 1   # WAVE_FORMAT_PCM
         bytesout = struct.pack("<h", value)
         self.fp.write(bytesout)

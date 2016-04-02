@@ -1,3 +1,6 @@
+// TODO: Figure out a #define I can use to switch this to only be included in the avr build
+#include <avr/pgmspace.h>
+
 // Based on 16 kHz bitrate and 1024 table size
 const uint16_t FREQUENCY_TABLE[] PROGMEM = { 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 7, 7, 7, 8, 8, 9, 9, 10, 11, 11, 12, 13, 14, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 28, 29, 31, 33, 35, 37, 39, 42, 44, 47, 50, 53, 56, 59, 63, 66, 70, 75, 79, 84, 89, 94, 100, 106, 112, 119, 126, 133, 141, 150, 159, 168, 178, 189, 200, 212, 225, 238, };
 

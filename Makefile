@@ -49,7 +49,7 @@ LIBS  = -lm
 all: sidish.hex sidish.bin
 .PHONY: all program
 
-sidish.o: sidish.c Makefile
+sidish.o: sidish.c goatplayer.c sidish.h Makefile
 	$(QUIET)$(CC) -c $(CFLAGS) -Wa,-adhlns=$(@:.o=.al) -o $@ $<
 
 sidish.elf: sidish.o songdata.o
@@ -62,6 +62,13 @@ sidish.hex: sidish.elf
 sidish.bin: sidish.elf
 	$(QUIET)$(OBJCOPY) -j .text -j .data -O binary $< $@
 	@echo Build complete. $@ is `stat -f '%z' $@` bytes.
+
+test.o: test.c
+	gcc -o $@ $<
+
+test: test.o
+	gcc -o $@ $<
+	./test
 
 program: $(PROGRAM).hex
 	$(UPLOADER) $(UPLOADER_FLAGS) -U flash:w:$(PROGRAM).hex

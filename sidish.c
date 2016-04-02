@@ -3,7 +3,6 @@
 // the famous Commodore 64 SID chip
 // by Brian Gunn (gunnbr@schminktronics.com) 
 
-
 // We need 2 timers:
 // 1) Used to generate the PWM audio out (Pin 3, using Timer 2A)
 //    Needs to run at (some frequency) above the audio frequency
@@ -42,56 +41,17 @@
 // For hooking up the hardware, see this article:
 //   https://developer.mbed.org/users/4180_1/notebook/using-a-speaker-for-audio-output/
 
-#define USE_WAVESHIELD (1)
-#define TEST_MODE (0)
-
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
+
+#include "sidish.h"
 
 #include "songdata.h"
 #include "tables.h"
 
-// SID Registers
-
-// 16 bits
-// Technically the ticks per cycle, not frequency
-// Key 49 (A4): 440 Hz = 2272 (actually 436.3 Hz)
-// Key 47 (G4): 392 Hz = 2551 (actually 388 Hz)
-// Key 44 (E4): 329 Hz = 3032 (actually 327 Hz)
-// Key 40 (C4): 261 Hz = 3822 (actually 259.325 Hz)
-short VOICE1_FREQUENCY = 3822;
-short VOICE2_FREQUENCY = 3032;
-short VOICE3_FREQUENCY = 2551;
-
-// 12 bits in SID, only 8 bits here
-short VOICE1_DUTY = 0x80;
-short VOICE2_DUTY = 0x80;
-short VOICE3_DUTY = 0x80;
-
-// 8 bits
-unsigned char VOICE1_CONTROL = 0;
-unsigned char VOICE2_CONTROL = 0;
-unsigned char VOICE3_CONTROL = 0;
-
-// 8 BITS
-unsigned char VOICE1_ATTACKDECAY = 0;
-
-// 8 BITS
-unsigned char VOICE1_SUSTAINRELEASE = 0;
-
-
-// For Adafruit WaveShield
-// pin 2 is DAC chip select (PD2)
-// pin 3 is DAC serial clock (PD3)
-// pin 4 is DAC serial data in (PD4)
-// pin 5 is LDAC if used (PD5)
-#define DAC_CS   (PD2)
-#define DAC_CLK  (PD3)
-#define DAC_DATA (PD4)
-#define DAC_LDAC (PD5)
-
-void InitializeSong(void);
-void programStep(void);
+// Ugly to include this like this, but it works for now.
+// TODO: Find a better way to compile the same .c file into 2 different object files soon.
+#include "goatplayer.c"
 
 void print(char *message)
 {
@@ -175,6 +135,20 @@ void printint(int value)
     put("0123456789"[ones]);
 }
 
+#if USE_WAVESHIELD
+
+// For Adafruit WaveShield
+// pin 2 is DAC chip select (PD2)
+// pin 3 is DAC serial clock (PD3)
+// pin 4 is DAC serial data in (PD4)
+// pin 5 is LDAC if used (PD5)
+#define DAC_CS   (PD2)
+#define DAC_CLK  (PD3)
+#define DAC_DATA (PD4)
+#define DAC_LDAC (PD5)
+
+#endif
+
 void setup()
 {
     cli();
@@ -252,216 +226,9 @@ void setup()
     // Serup serial for 8N1
     UCSR0C = 6; 
 
-    InitializeSong();
+    InitializeSong(song_start);
     
     sei();
-}
-
-uint8_t gNextOutputValue = 0;
-
-// Pointer to the start of each orderlist.
-const char *orderlist[3];
-
-// Pointer to the start of each pattern.
-// TODO: Optimize memory usage by reducing this value?
-const char *pattern[256];
-
-// The position in the orderlist for each channel
-uint8_t orderlistPosition[3];
-
-// The number of times remaining to repeat the current pattern before
-// moving to the next one
-uint8_t patternRepeatCountdown[3];
-
-// Pointer to the current position in the song data for each channel
-const char *songPosition[3];
-
-void InitializeSong(void)
-{
-    const char *data = song_start;
-
-    print("\n\n\n******** Initializing *******\n\n");
-    
-    uint32_t header = pgm_read_dword(data);
-    if (header != 0x35535447)
-    {
-        print("Header is not from GoatTracker\n");
-        return;
-    }
-    data += 4;
-    
-    print("Found GoatTracker header\n");
-
-    int i;
-    
-    char name[32];
-    for (i = 0 ; i < 32 ; i++)
-    {
-        name[i] = pgm_read_byte(data++);
-    }
-    print("Song Name: ");
-    print(name);
-    print("\n");
-    
-    for (i = 0 ; i < 32 ; i++)
-    {
-        name[i] = pgm_read_byte(data++);
-    }
-    print("   Author: ");
-    print(name);
-    print("\n");
-
-    for (i = 0 ; i < 32 ; i++)
-    {
-        name[i] = pgm_read_byte(data++);
-    }
-    print("Copyright: ");
-    print(name);
-    print("\n");
-
-    uint8_t subtunes = pgm_read_byte(data++);
-    print("# subtunes: ");
-    print8int(subtunes);
-    print("\n");
-
-    for(i = 0 ; i < subtunes ; i++)
-    {
-        // TODO: Handle multiple subtunes
-        uint8_t size = pgm_read_byte(data++);
-        orderlist[0] = data;
-        data += size + 1;
-
-        print("Subtune ");
-        print8int(i);
-        print(" Orderlist 1 Size ");
-        print8int(size);
-        print("\n");
-
-        size = pgm_read_byte(data++);
-        orderlist[1] = data;
-        data += size + 1;
-
-        print("Subtune ");
-        print8int(i);
-        print(" Orderlist 2 Size ");
-        print8int(size);
-        print("\n");
-
-        size = pgm_read_byte(data++);
-        orderlist[2] = data;
-        data += size + 1;
-        
-        print("Subtune ");
-        print8int(i);
-        print(" Orderlist 3 Size ");
-        print8int(size);
-        print("\n");
-    }
-
-    uint8_t numInstruments = pgm_read_byte(data++);
-    print("Number of instruments: ");
-    print8int(numInstruments);
-    print("\n");
-
-    for (i = 0 ; i < numInstruments ; i++)
-    {
-        uint8_t ad = pgm_read_byte(data++);
-        uint8_t sr = pgm_read_byte(data++);
-        data += 7;
-        for (uint8_t x = 0 ; x < 16 ; x++)
-        {
-            name[x] = pgm_read_byte(data++);
-        }
-        print("Instrument ");
-        print8int(i);
-        print(" (");
-        print(name);
-        print(") ");
-        print(": ADSR 0x");
-        print8hex(ad);
-        print8hex(sr);
-        print("\n");
-    }
-
-    uint8_t size = pgm_read_byte(data++);
-    print("Wavetable Size: ");
-    print8int(size);
-    print("\n");
-    data += size * 2;
-
-    size = pgm_read_byte(data++);
-    print("Pulsetable Size: ");
-    print8int(size);
-    print("\n");
-    data += size * 2;
-
-    size = pgm_read_byte(data++);
-    print("Filtertable Size: ");
-    print8int(size);
-    print("\n");
-    data += size * 2;
-
-    size = pgm_read_byte(data++);
-    print("Speedtable Size: ");
-    print8int(size);
-    print("\n");
-    data += size * 2;
-
-    uint8_t numPatterns = pgm_read_byte(data++);
-    print("Number Patterns: ");
-    print8int(numPatterns);
-    print("\n");
-
-    for(i = 0 ; i < numPatterns ; i++)
-    {
-        uint8_t length = pgm_read_byte(data++);
-        pattern[i] = data;
-        
-        print("Pattern ");
-        print8int(i);
-        print(": Rows ");
-        print8int(length);
-        print("\n");
-
-        data += 4*length;
-    }
-
-    // Initializa the song to get ready to play
-    for (uint8_t channel = 0 ; channel < 3 ; channel++)
-    {
-        // Start each channel at the first pattern in the order list
-        orderlistPosition[i] = 0;
-
-        uint8_t patternNumber;
-        do
-        {
-            // Get the pattern number from the current position
-            patternNumber = pgm_read_byte(orderlist[channel] + orderlistPosition[channel]);
-            if (patternNumber >= 0xD0 && patternNumber <= 0xDF)
-            {
-                orderlistPosition[channel]++;
-                uint8_t repeatCount = patternNumber & 0x0F;
-                if (repeatCount == 0)
-                {
-                    repeatCount = 16;
-                }
-                patternRepeatCountdown[channel] = repeatCount;
-            }
-            else if (patternNumber >= 0xE0 && patternNumber <= 0xFE)
-            {
-                orderlistPosition[channel]++;
-                // TODO: Handle transpose codes!
-            }
-        } while (patternNumber >= 0xD0);
-        
-        // Start each channel at the first song position for each pattern
-        songPosition[channel] = pattern[patternNumber];
-        print("Channel ");
-        print8int(channel);
-        print(" Initial Pattern: ");
-        print8int(patternNumber);
-        print("\n");
-    }
 }
 
 #if USE_WAVESHIELD
@@ -498,6 +265,7 @@ inline void DacSend(uint8_t data)
   
   // Send the 8 bits of data as the most
   // significant bits to the DAC
+  // TODO: Optimize this
   DAC_SENDBIT(data,  7);
   DAC_SENDBIT(data,  6);
   DAC_SENDBIT(data,  5);
@@ -521,186 +289,22 @@ inline void DacSend(uint8_t data)
 }
 #endif
 
-uint32_t totalTicks = 0;
-uint8_t erroron = 1;
-
-#define VBI_COUNT (16000 / 50)
-#define SONG_STEP_COUNT (3) // Essentially the tempo
-
-uint16_t channelCounts[4];
-uint16_t channelSteps[4];
-uint8_t errorPercent[4];
-uint8_t errorSteps[4];
-uint8_t voiceOn[4];
-uint16_t vbiCount = VBI_COUNT;
-uint8_t songStepCountdown = 1;
+void OutputByte(uint8_t value)
+{
+#if USE_WAVESHIELD
+    DacSend(value);
+#else
+    digitalWrite(4, HIGH);
+    OCR2B = value;
+    digitalWrite(4, LOW);
+#endif
+}
 
 // This is the audio output interrupt that gets called
 // at the audio output bitrate
 ISR(TIMER0_COMPA_vect) 
 {
-#if USE_WAVESHIELD
-  DacSend(gNextOutputValue);
-#else
-  digitalWrite(4, HIGH);
-  OCR2B = gNextOutputValue;
-  digitalWrite(4, LOW);
-#endif
-
-  int8_t outputValue = 0;
-
-  // 4 channels are actually supported, but since GoatTracker
-  // only supports 3 and I need more cycles, only process 3
-  // of them.
-  
-  for (uint8_t channel = 0 ; channel < 3 ; channel++)
-  {
-      if (voiceOn[channel])
-      {
-          channelCounts[channel] += channelSteps[channel];
-          errorPercent[channel] += errorSteps[channel];
-          if (errorPercent[channel] >= 100)
-          {
-#if TEST_MODE
-              if (erroron)
-#endif
-              channelCounts[channel]++;
-              errorPercent[channel] -= 100;
-          }
-          
-          if (channelCounts[channel] >= sizeof(sineTable))
-          {
-              channelCounts[channel] -= sizeof(sineTable);
-          }
-          
-          outputValue += (int8_t)pgm_read_byte(&sineTable[channelCounts[channel]]);
-      }
-  }  
-
-  // Scale -128 to 128 values to 0 to 255
-  gNextOutputValue = (uint8_t)((int16_t)outputValue + 128);
-
-#if !TEST_MODE
-  vbiCount--;
-  if (vbiCount == 0)
-  {
-      vbiCount = VBI_COUNT;
-
-      // Enable interrupts, then go through the program step.
-      // This should allow the ProgramStep routine to be
-      // interrupted by the ISR again if it takes too long,
-      // but that's okay.
-      // TODO: Test to see the maximum time the ProgramStep routine can take
-      sei();
-      programStep();
-  }
-#endif
-}
-
-void SetKey(uint8_t channel, uint8_t key)
-{
-    channelSteps[channel] = pgm_read_word(&FREQUENCY_TABLE[key]);
-    errorSteps[channel] = pgm_read_byte(&ERRORPERCENT_TABLE[key]);
-    channelCounts[channel] = 0;
-    errorPercent[channel] = 0;
-    voiceOn[channel] = 1;
-}
-
-void KeyOff(uint8_t channel)
-{
-    voiceOn[channel] = 0;
-}
-
-void programStep()
-{
-    songStepCountdown--;
-    if (songStepCountdown > 0)
-    {
-        // TODO Process effects here
-        return;
-    }
-
-    songStepCountdown = SONG_STEP_COUNT;
-
-    for(uint8_t channel = 0; channel < 3 ; channel++)
-    {
-        uint8_t note;
-        
-        do
-        {
-            note = pgm_read_byte(songPosition[channel]);
-            if (note >= 0x60 && note <= 0xBC)
-            {
-                note -= 0x60;
-                SetKey(channel, note);
-            }
-            else if (note == 0xBE)
-            {
-                KeyOff(channel);
-            }
-            else if (note == 0xFF)
-            {
-                if (patternRepeatCountdown[channel] > 0)
-                {
-                    patternRepeatCountdown[channel] -= 1;
-                    uint8_t patternNumber = pgm_read_byte(orderlist[channel] + orderlistPosition[channel]);
-                    songPosition[channel] = pattern[patternNumber];
-                    continue;
-                }
-                
-                orderlistPosition[channel]++;
-
-                uint8_t patternNumber;
-                do
-                {
-                    // Get the pattern number from the current position
-                    patternNumber = pgm_read_byte(orderlist[channel] + orderlistPosition[channel]);
-
-                    if (patternNumber >= 0xD0 && patternNumber <= 0xDF)
-                    {
-                        orderlistPosition[channel]++;
-                        uint8_t repeatCount = patternNumber & 0x0F;
-                        if (repeatCount == 0)
-                        {
-                            repeatCount = 16;
-                        }
-                        patternRepeatCountdown[channel] = repeatCount;
-                    }
-                    else if (patternNumber >= 0xE0 && patternNumber <= 0xFE)
-                    {
-                        orderlistPosition[channel]++;
-                        // TODO: Handle transpose codes!
-                    }
-                    else if (patternNumber == 0xFF)
-                    {
-                        orderlistPosition[channel]++;
-                        patternNumber = pgm_read_byte(orderlist[channel] + orderlistPosition[channel]);
-
-                        print("END ");
-                        print8int(channel);
-                        print(" Next ");
-                        print8int(patternNumber);
-                        print("\n");
-
-                        orderlistPosition[channel] = patternNumber;
-                    }
-                    else
-                    {
-                        print("Next ");
-                        print8int(channel);
-                        print(": ");
-                        print8int(patternNumber);
-                        print("\n");
-                    }
-                    
-                    songPosition[channel] = pattern[patternNumber];
-                } while (patternNumber >= 0xD0);
-            }
-        } while (note == 0xFF);
-
-        // TODO: Handle all the rest of the interesting parts
-        songPosition[channel] += 4;
-    }
+    OutputAudioAndCalculateNextByte();
 }
 
 int main (void)

@@ -47,62 +47,6 @@ uint8_t voiceOn[4];
 uint16_t vbiCount = VBI_COUNT;
 uint8_t songStepCountdown = 1;
 
-void OutputAudioAndCalculateNextByte(void)
-{
-    OutputByte(gNextOutputValue);
-
-    int8_t outputValue = 0;
-    
-    // 4 channels are actually supported, but since GoatTracker
-    // only supports 3 and I need more cycles, only process 3
-    // of them.
-    
-    for (uint8_t channel = 0 ; channel < 3 ; channel++)
-    {
-        if (voiceOn[channel])
-        {
-            channelCounts[channel] += channelSteps[channel];
-            errorPercent[channel] += errorSteps[channel];
-            if (errorPercent[channel] >= 100)
-            {
-#if TEST_MODE
-                if (erroron)
-#endif
-                    channelCounts[channel]++;
-                errorPercent[channel] -= 100;
-            }
-            
-            if (channelCounts[channel] >= sizeof(sineTable))
-            {
-                channelCounts[channel] -= sizeof(sineTable);
-            }
-            
-            outputValue += (int8_t)pgm_read_byte(&sineTable[channelCounts[channel]]);
-        }
-    }  
-    
-    // Scale -128 to 128 values to 0 to 255
-    gNextOutputValue = (uint8_t)((int16_t)outputValue + 128);
-    
-#if !TEST_MODE
-    vbiCount--;
-    if (vbiCount == 0)
-    {
-        vbiCount = VBI_COUNT;
-        
-        // Enable interrupts, then go through the program step.
-        // This should allow the GoatPlayerTick routine to be
-        // interrupted by the ISR again if it takes too long,
-        // but that's okay.
-        // TODO: Test to see the maximum time the GoatPlayerTick routine can take
-        sei();
-        GoatPlayerTick();
-    }
-#endif
-}
-
-
-
 // Pointer to the start of each orderlist.
 const char *orderlist[3];
 
@@ -322,6 +266,7 @@ void KeyOff(uint8_t channel)
     voiceOn[channel] = 0;
 }
 
+// Returns TRUE when the song is finished
 int GoatPlayerTick()
 {
     int songFinished = 0;
@@ -330,7 +275,7 @@ int GoatPlayerTick()
     if (songStepCountdown > 0)
     {
         // TODO Process effects here
-        return;
+        return songFinished;
     }
 
     songStepCountdown = SONG_STEP_COUNT;
@@ -420,3 +365,60 @@ int GoatPlayerTick()
     return songFinished;
 }
 
+int OutputAudioAndCalculateNextByte(void)
+{
+    OutputByte(gNextOutputValue);
+
+    int8_t outputValue = 0;
+    
+    // 4 channels are actually supported, but since GoatTracker
+    // only supports 3 and I need more cycles, only process 3
+    // of them.
+    
+    for (uint8_t channel = 0 ; channel < 3 ; channel++)
+    {
+        if (voiceOn[channel])
+        {
+            channelCounts[channel] += channelSteps[channel];
+            errorPercent[channel] += errorSteps[channel];
+            if (errorPercent[channel] >= 100)
+            {
+#if TEST_MODE
+                if (erroron)
+#endif
+                    channelCounts[channel]++;
+                errorPercent[channel] -= 100;
+            }
+            
+            if (channelCounts[channel] >= sizeof(SINE_TABLE))
+            {
+                channelCounts[channel] -= sizeof(SINE_TABLE);
+            }
+            
+            outputValue += (int8_t)pgm_read_byte(&SINE_TABLE[channelCounts[channel]]);
+        }
+    }  
+    
+    // Scale -128 to 128 values to 0 to 255
+    gNextOutputValue = (uint8_t)((int16_t)outputValue + 128);
+    
+#if !TEST_MODE
+    vbiCount--;
+    if (vbiCount == 0)
+    {
+        vbiCount = VBI_COUNT;
+        
+        // Enable interrupts, then go through the program step.
+        // This should allow the GoatPlayerTick routine to be
+        // interrupted by the ISR again if it takes too long,
+        // but that's okay.
+        // TODO: Test to see the maximum time the GoatPlayerTick routine can take
+#ifdef __AVR_ARCH__
+        sei();
+#endif
+        return GoatPlayerTick();
+    }
+
+    return 0;
+#endif
+}

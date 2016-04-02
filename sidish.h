@@ -9,15 +9,18 @@
 // If not set, uses a PWM pin as the DAC
 #define USE_WAVESHIELD (1)
 
+// Bitrate for output (DON'T CHANGE WITHOUT MAKING OTHER MODIFICATIONS IN THE CODE!!)
+#define BITRATE (16000)
+
 // Outputs the next byte of audio data
 void OutputByte(uint8_t value);
 
 // Outputs the previously calculated byte of audio and calculate
 // the next byte
-void OutputAudioAndCalculateNextByte();
+// Returns True if the song is finished, false otherwise
+int OutputAudioAndCalculateNextByte();
 
 void InitializeSong(const char *);
-void GoatPlayerTick(void);
 
 void print(char *message);
 void print8int(int8_t);

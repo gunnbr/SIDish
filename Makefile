@@ -63,12 +63,9 @@ sidish.bin: sidish.elf
 	$(QUIET)$(OBJCOPY) -j .text -j .data -O binary $< $@
 	@echo Build complete. $@ is `stat -f '%z' $@` bytes.
 
-test.o: test.c
+goattest: goattest.c goatplayer.c sidish.h
 	gcc -o $@ $<
-
-test: test.o
-	gcc -o $@ $<
-	./test
+	./$@
 
 program: $(PROGRAM).hex
 	$(UPLOADER) $(UPLOADER_FLAGS) -U flash:w:$(PROGRAM).hex

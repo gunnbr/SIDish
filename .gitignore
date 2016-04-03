@@ -6,4 +6,6 @@
 *.o
 *.s
 *~
-
+*.wav
+*.aiff
+goattest

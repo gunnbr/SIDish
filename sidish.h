@@ -12,6 +12,12 @@
 // Bitrate for output (DON'T CHANGE WITHOUT MAKING OTHER MODIFICATIONS IN THE CODE!!)
 #define BITRATE (16000)
 
+// Number of elements in the waveform tables
+#define TABLE_SIZE (1024)
+
+// Number of predefined keys in the frequency table
+#define NUM_PIANO_KEYS (87)
+
 // Outputs the next byte of audio data
 void OutputByte(uint8_t value);
 

@@ -39,11 +39,6 @@ uint8_t erroron = 1;
 #define VBI_COUNT (16000 / 50)
 #define SONG_STEP_COUNT (3) // Essentially the tempo
 
-uint16_t channelCounts[4];
-uint16_t channelSteps[4];
-uint8_t errorPercent[4];
-uint8_t errorSteps[4];
-uint8_t voiceOn[4];
 uint16_t vbiCount = VBI_COUNT;
 uint8_t songStepCountdown = 1;
 
@@ -51,7 +46,8 @@ uint8_t songStepCountdown = 1;
 const char *orderlist[3];
 
 // Pointer to the start of each pattern.
-// TODO: Optimize memory usage by reducing this value?
+// TODO: Optimize memory usage by reducing this value.
+// This alone takes a lot of the available RAM on an ATmega328
 const char *pattern[256];
 
 // The position in the orderlist for each channel
@@ -63,6 +59,41 @@ uint8_t patternRepeatCountdown[3];
 
 // Pointer to the current position in the song data for each channel
 const char *songPosition[3];
+
+struct Voice
+{
+    // The number of steps through the SINE_TABLE for each cycle
+    // of the bitrate
+    uint16_t steps;   // channelSteps[4];
+
+    // The current accumulated position through the SINE_TABLE
+    uint16_t tableOffset; // Formerly channelCounts[4];
+
+    // The error percent accumulated with each cycle of the bitrate
+    uint8_t errorSteps;
+
+    // The accumulated error percent
+    uint8_t errorPercent;
+
+    // Whether the channel is on or not
+    uint8_t channelOn;
+} channels[4];
+
+// Instrument definition
+struct Instrument
+{
+    uint8_t attackDecay;     // +0      byte    Attack/Decay
+    uint8_t sustainRelease;  // +1      byte    Sustain/Release
+    uint8_t waveOffset;      // +2      byte    Wavepointer
+    uint8_t pulseOfset;      // +3      byte    Pulsepointer
+    uint8_t filterOffset;    // +4      byte    Filterpointer
+    uint8_t speedOffset;     // +5      byte    Vibrato param. (speedtable pointer)
+    uint8_t vibratoDelay;    // +6      byte    Vibrato delay
+    uint8_t gateoffTime;     // +7      byte    Gateoff timer
+    uint8_t hardRestart;     // +8      byte    Hard restart/1st frame waveform
+    char    name[16];        // +9      16      Instrument name
+} *instruments;
+
 
 void InitializeSong(const char *songdata)
 {
@@ -151,14 +182,17 @@ void InitializeSong(const char *songdata)
     print8int(numInstruments);
     print("\n");
 
+    instruments = (struct Instrument *)data;
+
     for (i = 0 ; i < numInstruments ; i++)
     {
-        uint8_t ad = pgm_read_byte(data++);
-        uint8_t sr = pgm_read_byte(data++);
-        data += 7;
+        data += 25;
+        
+        uint8_t ad = pgm_read_byte(&instruments[i].attackDecay);
+        uint8_t sr = pgm_read_byte(&instruments[i].sustainRelease);
         for (uint8_t x = 0 ; x < 16 ; x++)
         {
-            name[x] = pgm_read_byte(data++);
+            name[x] = pgm_read_byte(&instruments[i].name[x]);
         }
         print("Instrument ");
         print8int(i);
@@ -170,7 +204,7 @@ void InitializeSong(const char *songdata)
         print8hex(sr);
         print("\n");
     }
-
+    
     uint8_t size = pgm_read_byte(data++);
     print("Wavetable Size: ");
     print8int(size);
@@ -252,18 +286,18 @@ void InitializeSong(const char *songdata)
     }
 }
 
-void SetKey(uint8_t channel, uint8_t key)
+void SetKey(uint8_t channel, uint8_t key, uint8_t instrument)
 {
-    channelSteps[channel] = pgm_read_word(&FREQUENCY_TABLE[key]);
-    errorSteps[channel] = pgm_read_byte(&ERRORPERCENT_TABLE[key]);
-    channelCounts[channel] = 0;
-    errorPercent[channel] = 0;
-    voiceOn[channel] = 1;
+    channels[channel].steps = pgm_read_word(&FREQUENCY_TABLE[key]);
+    channels[channel].errorSteps = pgm_read_byte(&ERRORPERCENT_TABLE[key]);
+    channels[channel].tableOffset = 0;
+    channels[channel].errorPercent = 0;
+    channels[channel].channelOn = 1;
 }
 
 void KeyOff(uint8_t channel)
 {
-    voiceOn[channel] = 0;
+    channels[channel].channelOn = 0;
 }
 
 // Returns TRUE when the song is finished
@@ -283,14 +317,19 @@ int GoatPlayerTick()
     for(uint8_t channel = 0; channel < 3 ; channel++)
     {
         uint8_t note;
+        uint8_t instrument;
         
         do
         {
             note = pgm_read_byte(songPosition[channel]);
             if (note >= 0x60 && note <= 0xBC)
             {
+                instrument = pgm_read_byte(songPosition[channel] + 1);
+                
                 note -= 0x60;
-                SetKey(channel, note);
+                SetKey(channel, note, instrument);
+
+                // printf("NOTE ON -- Channel %u Note: %u Instrument: %u\n", channel, note, instrument);
             }
             else if (note == 0xBE)
             {
@@ -377,25 +416,25 @@ int OutputAudioAndCalculateNextByte(void)
     
     for (uint8_t channel = 0 ; channel < 3 ; channel++)
     {
-        if (voiceOn[channel])
+        if (channels[channel].channelOn)
         {
-            channelCounts[channel] += channelSteps[channel];
-            errorPercent[channel] += errorSteps[channel];
-            if (errorPercent[channel] >= 100)
+            channels[channel].tableOffset += channels[channel].steps;
+            channels[channel].errorPercent += channels[channel].errorSteps;
+            if (channels[channel].errorPercent >= 100)
             {
 #if TEST_MODE
                 if (erroron)
 #endif
-                    channelCounts[channel]++;
-                errorPercent[channel] -= 100;
+                    channels[channel].tableOffset++;
+                channels[channel].errorPercent -= 100;
             }
             
-            if (channelCounts[channel] >= sizeof(SINE_TABLE))
+            if (channels[channel].tableOffset >= TABLE_SIZE)
             {
-                channelCounts[channel] -= sizeof(SINE_TABLE);
+                channels[channel].tableOffset -= TABLE_SIZE;
             }
             
-            outputValue += (int8_t)pgm_read_byte(&SINE_TABLE[channelCounts[channel]]);
+            outputValue += (int8_t)pgm_read_byte(&SINE_TABLE[channels[channel].tableOffset]);
         }
     }  
     

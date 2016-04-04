@@ -6,9 +6,6 @@
 
 #include "sidish.h"
 
-#define TABLE_SIZE (1024)
-#define NUM_PIANO_KEYS (87)
-
 uint16_t FREQUENCY_TABLE[NUM_PIANO_KEYS];
 uint8_t ERRORPERCENT_TABLE[NUM_PIANO_KEYS];
 int8_t SINE_TABLE[TABLE_SIZE];
@@ -83,12 +80,15 @@ void InitializeTables()
 
 }
 
+#define SONGNAME "Comic_Bakery.sng"
+//#define SONGNAME "EnvelopeTest.sng"
+
 int main(void)
 {
     InitializeTables();
     
     FILE *fp;
-    fp = fopen("Comic_Bakery.sng", "rb");
+    fp = fopen(SONGNAME, "rb");
     if (fp == NULL)
     {
         printf("Failed to open the song data.\n");

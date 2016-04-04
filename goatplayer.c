@@ -5,34 +5,6 @@
 
 uint8_t gNextOutputValue = 0;
 
-// SID Registers
-
-// 16 bits
-// Technically the ticks per cycle, not frequency
-// Key 49 (A4): 440 Hz = 2272 (actually 436.3 Hz)
-// Key 47 (G4): 392 Hz = 2551 (actually 388 Hz)
-// Key 44 (E4): 329 Hz = 3032 (actually 327 Hz)
-// Key 40 (C4): 261 Hz = 3822 (actually 259.325 Hz)
-short VOICE1_FREQUENCY = 3822;
-short VOICE2_FREQUENCY = 3032;
-short VOICE3_FREQUENCY = 2551;
-
-// 12 bits in SID, only 8 bits here
-short VOICE1_DUTY = 0x80;
-short VOICE2_DUTY = 0x80;
-short VOICE3_DUTY = 0x80;
-
-// 8 bits
-unsigned char VOICE1_CONTROL = 0;
-unsigned char VOICE2_CONTROL = 0;
-unsigned char VOICE3_CONTROL = 0;
-
-// 8 BITS
-unsigned char VOICE1_ATTACKDECAY = 0;
-
-// 8 BITS
-unsigned char VOICE1_SUSTAINRELEASE = 0;
-
 uint32_t totalTicks = 0;
 uint8_t erroron = 1;
 
@@ -60,23 +32,67 @@ uint8_t patternRepeatCountdown[3];
 // Pointer to the current position in the song data for each channel
 const char *songPosition[3];
 
+// SID Registers
+// 16 bit FREQUENCY
+// 12 bit DUTY_CYCLE in SID, only 8 bits here
+// 8 bit CONTROL register
+// 8 bit ATTACK_DECAY
+// 8 bit SUSTAIN_RELEASE
+
+enum EnvelopePhase
+{
+    Off,
+    Attack,
+    Decay,
+    Sustain,
+    Release,
+};
+
+#define CONTROL_GATE            (0x01)
+#define CONTROL_SYNCHRONIZE     (0x02) // NOT IMPLEMENTED
+#define CONTROL_RING_MODULATION (0x04) // NOT IMPLEMENTED
+#define CONTROL_TESTBIT         (0x08) // NOT IMPLEMENTED
+#define CONTROL_TRIANGLE        (0x10)
+#define CONTROL_SAWTOOTH        (0x20)
+#define CONTROL_PULSE           (0x40)
+#define CONTROL_NOISE           (0x80)
+
+// Number of cycles between each modification of the fader
+// Based on the BITRATE and the times for the SID chip given in the SID Wizard documentation
+const uint16_t AttackCycles[16] = { 1, 4, 8, 12, 19, 28, 34, 40, 50, 125, 250, 400, 500, 1500, 2500, 4000 };
+const uint16_t DecayReleaseCycles[16] = { 3, 12, 24, 36, 57, 84, 102, 120, 150, 375, 750, 1200, 1500, 4500, 7500, 12000 };
+
 struct Voice
 {
     // The number of steps through the SINE_TABLE for each cycle
     // of the bitrate
-    uint16_t steps;   // channelSteps[4];
+    uint16_t steps;
 
     // The current accumulated position through the SINE_TABLE
-    uint16_t tableOffset; // Formerly channelCounts[4];
+    uint16_t tableOffset;
 
     // The error percent accumulated with each cycle of the bitrate
     uint8_t errorSteps;
 
     // The accumulated error percent
+    // TODO: Switch to use "per 256ths" instead -- essentially fixed point number
+    //       Then switch to assembly so we can look at the Carry flag to add the
+    //       error value
     uint8_t errorPercent;
 
-    // Whether the channel is on or not
-    uint8_t channelOn;
+    // Envelope values
+    uint8_t attackDecay;
+    uint8_t sustainRelease;
+    
+    // Current phase in the envelope generator
+    enum EnvelopePhase envelopePhase;
+
+    // Cycles remaining until we adjust the fadeAmount
+    uint16_t phaseStepCountdown;
+    
+    // Amount to fade the current value (based on the current position in the ADSR envelope)
+    uint8_t fadeAmount;
+    
 } channels[4];
 
 // Instrument definition
@@ -286,18 +302,26 @@ void InitializeSong(const char *songdata)
     }
 }
 
-void SetKey(uint8_t channel, uint8_t key, uint8_t instrument)
+void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
 {
     channels[channel].steps = pgm_read_word(&FREQUENCY_TABLE[key]);
     channels[channel].errorSteps = pgm_read_byte(&ERRORPERCENT_TABLE[key]);
     channels[channel].tableOffset = 0;
     channels[channel].errorPercent = 0;
-    channels[channel].channelOn = 1;
+    channels[channel].attackDecay = pgm_read_word(&instruments[instrument - 1].attackDecay);
+    channels[channel].sustainRelease = pgm_read_word(&instruments[instrument - 1].sustainRelease);
+    channels[channel].fadeAmount = 32;
+    channels[channel].envelopePhase = Attack;
+    channels[channel].phaseStepCountdown = AttackCycles[(channels[channel].attackDecay & 0xF0) >> 4];
+    // TODO: Store the instrument # so that if we use instrument #0, it keeps the same instrument as before (I think).
+    //printf("Instrument %u: AD: 0x%02X SR: 0x%02X ", instrument, channels[channel].attackDecay, channels[channel].sustainRelease);
+    //printf("Key On: %u Attack Countdown: %u\n", key, channels[channel].phaseStepCountdown);
 }
 
 void KeyOff(uint8_t channel)
 {
-    channels[channel].channelOn = 0;
+    channels[channel].envelopePhase = Release;
+    channels[channel].phaseStepCountdown = DecayReleaseCycles[channels[channel].sustainRelease & 0x0F];
 }
 
 // Returns TRUE when the song is finished
@@ -327,7 +351,7 @@ int GoatPlayerTick()
                 instrument = pgm_read_byte(songPosition[channel] + 1);
                 
                 note -= 0x60;
-                SetKey(channel, note, instrument);
+                KeyOn(channel, note, instrument);
 
                 // printf("NOTE ON -- Channel %u Note: %u Instrument: %u\n", channel, note, instrument);
             }
@@ -416,7 +440,7 @@ int OutputAudioAndCalculateNextByte(void)
     
     for (uint8_t channel = 0 ; channel < 3 ; channel++)
     {
-        if (channels[channel].channelOn)
+        if (channels[channel].envelopePhase != Off)
         {
             channels[channel].tableOffset += channels[channel].steps;
             channels[channel].errorPercent += channels[channel].errorSteps;
@@ -433,8 +457,81 @@ int OutputAudioAndCalculateNextByte(void)
             {
                 channels[channel].tableOffset -= TABLE_SIZE;
             }
+
+            int8_t waveformValue = (int8_t)pgm_read_byte(&SINE_TABLE[channels[channel].tableOffset]);
+            int16_t shortWaveformValue = (int16_t)waveformValue;
+            int8_t fadedValue = (int8_t) (shortWaveformValue * (32 - channels[channel].fadeAmount) / 32);
+            // printf("waveform: %2d short: %2d fadeAmount: %2u faded: %2d\n",
+            //        waveformValue, shortWaveformValue, channels[channel].fadeAmount, fadedValue);
             
-            outputValue += (int8_t)pgm_read_byte(&SINE_TABLE[channels[channel].tableOffset]);
+            outputValue += fadedValue;
+
+            channels[channel].phaseStepCountdown--;
+            if (channels[channel].phaseStepCountdown == 0)
+            {
+                // TODO: Parse out and save the A D S R values ahead of time and store
+                // in the struct so we don't have to do it a lot here?
+                switch (channels[channel].envelopePhase)
+                {
+                case Attack:
+                    channels[channel].fadeAmount--;
+                    if (channels[channel].fadeAmount == 0)
+                    {
+                        // TODO: Figure out exactly how the decay works. Is it "X ms" to decay from the
+                        //       maximum to the sustain value or is it "X ms" total if we were decaying
+                        //       to the minimum?
+                        channels[channel].envelopePhase = Decay;
+                        channels[channel].phaseStepCountdown = DecayReleaseCycles[channels[channel].attackDecay & 0x0F];
+                    }
+                    else
+                    {
+                        channels[channel].phaseStepCountdown = AttackCycles[(channels[channel].attackDecay & 0xF0) >> 4];
+                    }
+                    break;
+
+                case Decay:
+                    {
+                        uint8_t sustainLevel = 0x0F - ((channels[channel].sustainRelease & 0xF0) >> 4);
+                        sustainLevel <<= 1;
+                        
+                        // Decaying from the maximum value to the sustain level
+                        // TODO: Problem here when Sustain is F
+                    
+                        channels[channel].fadeAmount++;
+                        if (channels[channel].fadeAmount >= sustainLevel)
+                        {
+                            channels[channel].envelopePhase = Sustain;
+                            // TODO: Really should just disable the phaseCountdown here, but maybe it doesn't matter
+                        }
+                        else
+                        {
+                            channels[channel].phaseStepCountdown = DecayReleaseCycles[channels[channel].attackDecay & 0x0F];
+                        }
+                    }
+                    break;
+
+                case Sustain:
+                    // Do nothing. Just sustain
+                    break;
+
+                case Release:
+                    // Fade from the sustain level to 0 (fadeAmount of 32)
+                    channels[channel].fadeAmount++;
+                    if (channels[channel].fadeAmount == 32)
+                    {
+                        channels[channel].envelopePhase = Off;
+                    }
+                    else
+                    {
+                        channels[channel].phaseStepCountdown = DecayReleaseCycles[channels[channel].sustainRelease & 0x0F];
+                    }
+                    break;
+
+                case Off:
+                    // Doesn't need to be here except to avoid the compiler warning
+                    break;
+                }
+            }
         }
     }  
     

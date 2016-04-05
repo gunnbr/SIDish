@@ -55,6 +55,12 @@ void InitializeTables()
     }
     printf("};\n");
 
+    // TODO: Change this so that the frequency table is a 16bit integer.
+    // The high 8 bits are what we put in the FREQUENCY_TABLE now while
+    // the low 8 bits are the "error percent" in 256th's, making this
+    // essentially a fixed point floating point math.
+    // When we want to use the value, just use the high 8 bits to look
+    // up in the SINE_TABLE just as we do now.
     for (x = 0 ; x < NUM_PIANO_KEYS ; x++)
     {
         double frequency = pow(2, (x-49.0)/12.0) * 440.0;

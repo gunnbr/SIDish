@@ -313,8 +313,8 @@ int main (void)
 
 #if TEST_MODE
     uint8_t key = 40;
-    
-    SetKey(0, key);
+
+    KeyOn(0, key, 4);
 
     while (1)
     {
@@ -328,7 +328,7 @@ int main (void)
                 if (key < 83)
                 {
                     key++;
-                    SetKey(0, key);
+                    KeyOn(0, key, 4);
                 }
             }
             else if (command == 31 || command == 'j')
@@ -337,13 +337,20 @@ int main (void)
                 if (key > 0)
                 {
                     key--;
-                    SetKey(0, key);
+                    KeyOn(0, key, 4);
                 }
             }
-            else if (command == 32)
+            else if (command == '\n')
             {
-                print(" ERR: ");
-                erroron = !erroron;
+                print("Key OFF\n");
+                KeyOff(0);
+                continue;
+            }
+            else if (command == ' ')
+            {
+                print("RESET INSTRUMENTS\n");
+                EnableFakeInstruments();
+                continue;
             }
             else
             {
@@ -354,17 +361,6 @@ int main (void)
                     
             print("Key: ");
             print8int(key);
-            print(" Err: ");
-
-            if (erroron)
-            {
-                print("ON");
-            }
-            else
-            {
-                print("OFF");
-            }
-            
             print("\n");
         }
     }

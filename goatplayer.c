@@ -6,7 +6,6 @@
 uint8_t gNextOutputValue = 0;
 
 uint32_t totalTicks = 0;
-uint8_t erroron = 1;
 
 #define VBI_COUNT (16000 / 50)
 #define SONG_STEP_COUNT (3) // Essentially the tempo
@@ -66,19 +65,12 @@ struct Voice
 {
     // The number of steps through the SINE_TABLE for each cycle
     // of the bitrate
-    uint16_t steps;
+    uint32_t steps;
 
     // The current accumulated position through the SINE_TABLE
-    uint16_t tableOffset;
-
-    // The error percent accumulated with each cycle of the bitrate
-    uint8_t errorSteps;
-
-    // The accumulated error percent
-    // TODO: Switch to use "per 256ths" instead -- essentially fixed point number
-    //       Then switch to assembly so we can look at the Carry flag to add the
-    //       error value
-    uint8_t errorPercent;
+    // High 16 bits are the offset in the SINE_TABLE.
+    // Low 16 bits are the accumulated error offset (essentially a fixed decimal point value)
+    uint32_t tableOffset;
 
     // Envelope values
     uint8_t attackDecay;
@@ -110,6 +102,17 @@ struct Instrument
     char    name[16];        // +9      16      Instrument name
 } *instruments;
 
+#if TEST_MODE
+struct Instrument FakeInstruments[1] =
+{
+    {0x00, 0xF0, 0, 0, 0, 0, 0, 0, 0, "TestInstrument"}
+};
+    
+void EnableFakeInstruments()
+{
+    instruments = FakeInstruments;
+}
+#endif
 
 void InitializeSong(const char *songdata)
 {
@@ -304,10 +307,8 @@ void InitializeSong(const char *songdata)
 
 void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
 {
-    channels[channel].steps = pgm_read_word(&FREQUENCY_TABLE[key]);
-    channels[channel].errorSteps = pgm_read_byte(&ERRORPERCENT_TABLE[key]);
+    channels[channel].steps = pgm_read_dword(&FREQUENCY_TABLE[key]);
     channels[channel].tableOffset = 0;
-    channels[channel].errorPercent = 0;
     channels[channel].attackDecay = pgm_read_word(&instruments[instrument - 1].attackDecay);
     channels[channel].sustainRelease = pgm_read_word(&instruments[instrument - 1].sustainRelease);
     channels[channel].fadeAmount = 32;
@@ -442,23 +443,24 @@ int OutputAudioAndCalculateNextByte(void)
     {
         if (channels[channel].envelopePhase != Off)
         {
+            //printf("Channel %u Offset: 0x%08X + Steps: 0x%08X = ", channel, channels[channel].tableOffset, channels[channel].steps);
             channels[channel].tableOffset += channels[channel].steps;
-            channels[channel].errorPercent += channels[channel].errorSteps;
-            if (channels[channel].errorPercent >= 100)
-            {
-#if TEST_MODE
-                if (erroron)
-#endif
-                    channels[channel].tableOffset++;
-                channels[channel].errorPercent -= 100;
-            }
+            //printf("0x%08X ", channels[channel].tableOffset);
+
+            uint32_t offset = channels[channel].tableOffset >> 16;
+            //printf("Offset: 0x%04X ", offset);
             
-            if (channels[channel].tableOffset >= TABLE_SIZE)
+            if (offset >= TABLE_SIZE)
             {
-                channels[channel].tableOffset -= TABLE_SIZE;
+                offset -= TABLE_SIZE;
+                channels[channel].tableOffset &= 0xFFFF;
+                channels[channel].tableOffset |= offset << 16;
             }
 
-            int8_t waveformValue = (int8_t)pgm_read_byte(&SINE_TABLE[channels[channel].tableOffset]);
+            int8_t waveformValue = (int8_t)pgm_read_byte(&SINE_TABLE[offset]);
+
+            //printf("Wave: %d\n", waveformValue);
+            
             int16_t shortWaveformValue = (int16_t)waveformValue;
             int8_t fadedValue = (int8_t) (shortWaveformValue * (32 - channels[channel].fadeAmount) / 32);
             // printf("waveform: %2d short: %2d fadeAmount: %2u faded: %2d\n",
@@ -554,7 +556,7 @@ int OutputAudioAndCalculateNextByte(void)
 #endif
         return GoatPlayerTick();
     }
+#endif
 
     return 0;
-#endif
 }

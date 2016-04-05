@@ -6,8 +6,12 @@
 
 #include "sidish.h"
 
-uint16_t FREQUENCY_TABLE[NUM_PIANO_KEYS];
-uint8_t ERRORPERCENT_TABLE[NUM_PIANO_KEYS];
+// This table holds the number of steps through the
+// SINE_TABLE for each cycle of the BITRATE.
+// This is essentially a fixed point floating point table.
+// The high 16 bits are used as the lookup into the SINE_TABLE
+// and the low 16 bits are the error in units of 1/65536ths.
+uint32_t FREQUENCY_TABLE[NUM_PIANO_KEYS];
 int8_t SINE_TABLE[TABLE_SIZE];
 
 
@@ -65,25 +69,17 @@ void InitializeTables()
     {
         double frequency = pow(2, (x-49.0)/12.0) * 440.0;
         double steps = (frequency / (double)BITRATE * (double)TABLE_SIZE);
-        FREQUENCY_TABLE[x] = (uint16_t)steps;
-        ERRORPERCENT_TABLE[x] = (uint8_t)floor(steps * 100 - FREQUENCY_TABLE[x] * 100);
+        uint16_t frequencySteps = (uint16_t) steps;
+        uint16_t error = (uint16_t)floor(steps * 65536 - frequencySteps * 65536);
+        FREQUENCY_TABLE[x] = ((uint16_t)frequencySteps << 16) | ((uint16_t)error & 0xFFFF);
     }
 
-    
-    printf("const uint16_t FREQUENCY_TABLE[] PROGMEM = {");
+    printf("const uint32_t FREQUENCY_TABLE[] PROGMEM = {");
     for(x = 0 ; x < NUM_PIANO_KEYS ; x++)
     {
-        printf("%d,", FREQUENCY_TABLE[x]);
+        printf("0x%08X,", FREQUENCY_TABLE[x]);
     }
     printf("};\n");
-
-    printf("const uint8_t ERRORPERCENT_TABLE[] PROGMEM = {");
-    for(x = 0 ; x < NUM_PIANO_KEYS ; x++)
-    {
-        printf("%d,",ERRORPERCENT_TABLE[x]);
-    }
-    printf("};\n");
-
 }
 
 #define SONGNAME "Comic_Bakery.sng"

@@ -1,4 +1,4 @@
-// TODO: Figure out a #define I can use to switch this to only be included in the avr build
+// This file is only included in the AVR build
 #include <avr/pgmspace.h>
 
 // Based on 16 kHz bitrate and 1024 table size

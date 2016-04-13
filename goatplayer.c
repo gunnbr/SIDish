@@ -63,14 +63,14 @@ const uint16_t DecayReleaseCycles[16] = { 3, 12, 24, 36, 57, 84, 102, 120, 150, 
 
 struct Voice
 {
-    // The number of steps through the SINE_TABLE for each cycle
+    // The number of steps through the waveform for each cycle
     // of the bitrate
-    uint32_t steps;
+    uint16_t steps;
 
-    // The current accumulated position through the SINE_TABLE
-    // High 16 bits are the offset in the SINE_TABLE.
-    // Low 16 bits are the accumulated error offset (essentially a fixed decimal point value)
-    uint32_t tableOffset;
+    // The current accumulated position through the waveform
+    // High byte is the output value + 32
+    // Low byte is the accumulated error offset (essentially a fixed decimal point value)
+    uint16_t tableOffset;
 
     // Envelope values
     uint8_t attackDecay;
@@ -307,7 +307,7 @@ void InitializeSong(const char *songdata)
 
 void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
 {
-    channels[channel].steps = pgm_read_dword(&FREQUENCY_TABLE[key]);
+    channels[channel].steps = pgm_read_word(&SAWTOOTH_TABLE[key]);
     channels[channel].tableOffset = 0;
     channels[channel].attackDecay = pgm_read_word(&instruments[instrument - 1].attackDecay);
     channels[channel].sustainRelease = pgm_read_word(&instruments[instrument - 1].sustainRelease);
@@ -443,27 +443,35 @@ int OutputAudioAndCalculateNextByte(void)
     {
         if (channels[channel].envelopePhase != Off)
         {
-            //printf("Channel %u Offset: 0x%08X + Steps: 0x%08X = ", channel, channels[channel].tableOffset, channels[channel].steps);
+            //printf("Channel %u Offset: 0x%04X + Steps: 0x%04X = ", channel, channels[channel].tableOffset, channels[channel].steps);
             channels[channel].tableOffset += channels[channel].steps;
-            //printf("0x%08X ", channels[channel].tableOffset);
+            //printf("0x%04X ", channels[channel].tableOffset);
 
-            uint32_t offset = channels[channel].tableOffset >> 16;
+            uint16_t offset = channels[channel].tableOffset >> 8;
             //printf("Offset: 0x%04X ", offset);
             
-            if (offset >= TABLE_SIZE)
+            if (offset >= 64)
             {
-                offset -= TABLE_SIZE;
-                channels[channel].tableOffset &= 0xFFFF;
-                channels[channel].tableOffset |= offset << 16;
+                offset -= 64;
+                channels[channel].tableOffset &= 0xFF;
+                channels[channel].tableOffset |= offset << 8;
             }
 
-            int8_t waveformValue = (int8_t)pgm_read_byte(&SINE_TABLE[offset]);
-
+#if 1 // SAWTOOTH
+            int8_t waveformValue = offset - 32;
+#else // TRIANGLE
+            int8_t waveformValue = offset * 2;
+            if (waveformValue >= 64)
+            {
+              waveformValue = 128 - waveformValue;
+            }
+            waveformValue -= 32;
+#endif
             //printf("Wave: %d\n", waveformValue);
             
             int16_t shortWaveformValue = (int16_t)waveformValue;
             int8_t fadedValue = (int8_t) (shortWaveformValue * (32 - channels[channel].fadeAmount) / 32);
-            // printf("waveform: %2d short: %2d fadeAmount: %2u faded: %2d\n",
+            //printf("waveform: %2d short: %2d fadeAmount: %2u faded: %2d\n",
             //        waveformValue, shortWaveformValue, channels[channel].fadeAmount, fadedValue);
             
             outputValue += fadedValue;

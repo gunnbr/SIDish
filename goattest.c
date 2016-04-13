@@ -12,6 +12,7 @@
 // The high 16 bits are used as the lookup into the SINE_TABLE
 // and the low 16 bits are the error in units of 1/65536ths.
 uint32_t FREQUENCY_TABLE[NUM_PIANO_KEYS];
+uint16_t SAWTOOTH_TABLE[NUM_PIANO_KEYS];
 int8_t SINE_TABLE[TABLE_SIZE];
 
 
@@ -65,19 +66,45 @@ void InitializeTables()
     // essentially a fixed point floating point math.
     // When we want to use the value, just use the high 8 bits to look
     // up in the SINE_TABLE just as we do now.
+    //
+    // Sawtooth waveform:
+    // ------------------
+    // Repeats every BITRATE / FREQUENCY
+    // At the start of each cycle, we start at 0 and count up to 63,
+    // which is 64 steps.
+    // So, each BITRATE interrupt, step by 64 / BITRATE / FREQUENCY
+    // Use a 16 bit format with the format:
+    // value | 1/256ths value
+    // Then subtract 32 from the most significant byte before using it
+    
     for (x = 0 ; x < NUM_PIANO_KEYS ; x++)
     {
         double frequency = pow(2, (x-49.0)/12.0) * 440.0;
+
+        // Calculate the steps for the sine wave table
         double steps = (frequency / (double)BITRATE * (double)TABLE_SIZE);
         uint16_t frequencySteps = (uint16_t) steps;
         uint16_t error = (uint16_t)floor(steps * 65536 - frequencySteps * 65536);
         FREQUENCY_TABLE[x] = ((uint16_t)frequencySteps << 16) | ((uint16_t)error & 0xFFFF);
+
+        // Calculate the steps for the sawtooth table
+        steps = 64.0 / ((double)BITRATE / frequency);
+        frequencySteps = (uint16_t)steps;
+        error = (uint16_t)floor(steps * 256 - frequencySteps * 256);
+        SAWTOOTH_TABLE[x] = (frequencySteps << 8) | (error & 0xFF);
     }
 
     printf("const uint32_t FREQUENCY_TABLE[] PROGMEM = {");
     for(x = 0 ; x < NUM_PIANO_KEYS ; x++)
     {
         printf("0x%08X,", FREQUENCY_TABLE[x]);
+    }
+    printf("};\n");
+
+    printf("const uint32_t SAWTOOTH_TABLE[] PROGMEM = {");
+    for(x = 0 ; x < NUM_PIANO_KEYS ; x++)
+    {
+        printf("0x%04X,", SAWTOOTH_TABLE[x]);
     }
     printf("};\n");
 }

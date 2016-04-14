@@ -61,6 +61,8 @@ enum EnvelopePhase
 const uint16_t AttackCycles[16] = { 1, 4, 8, 12, 19, 28, 34, 40, 50, 125, 250, 400, 500, 1500, 2500, 4000 };
 const uint16_t DecayReleaseCycles[16] = { 3, 12, 24, 36, 57, 84, 102, 120, 150, 375, 750, 1200, 1500, 4500, 7500, 12000 };
 
+uint16_t gNoise = 0x42;
+
 struct Voice
 {
     // The number of steps through the waveform for each cycle
@@ -441,6 +443,11 @@ int OutputAudioAndCalculateNextByte(void)
     
     for (uint8_t channel = 0 ; channel < 3 ; channel++)
     {
+        uint16_t bit = ((gNoise >> 0) ^ (gNoise >> 2) ^ (gNoise >> 3) ^ (gNoise >> 5)) & 1;
+        gNoise = (gNoise >> 1) | (bit << 15);
+
+        // printf("Noise: 0x%02X ", gNoise);
+        
         if (channels[channel].envelopePhase != Off)
         {
             //printf("Channel %u Offset: 0x%04X + Steps: 0x%04X = ", channel, channels[channel].tableOffset, channels[channel].steps);
@@ -467,7 +474,10 @@ int OutputAudioAndCalculateNextByte(void)
             }
             waveformValue -= 32;
 #endif
-            //printf("Wave: %d\n", waveformValue);
+            // NOISE
+            //waveformValue = (gNoise & 0x3F) - 32;
+            
+            // printf("Wave: %d\n", waveformValue);
             
             int16_t shortWaveformValue = (int16_t)waveformValue;
             int8_t fadedValue = (int8_t) (shortWaveformValue * (32 - channels[channel].fadeAmount) / 32);

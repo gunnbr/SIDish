@@ -20,6 +20,9 @@
 //      which is exactly what I want, so I'll start with it.
 //           http://wiki.openmusiclabs.com/wiki/PWMDAC
 //
+//   If we use an alternate method for our DAC, such as the Adafruit
+//     Wave Shield, we may not need to use this timer.
+//
 // 2) Runs at the sample output rate
 //    I'm starting with 16,000 Hz which I'm guessing is a 
 //      good balance between audio fidelity and cycles available

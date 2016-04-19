@@ -13,7 +13,6 @@
 // and the low 16 bits are the error in units of 1/65536ths.
 uint32_t FREQUENCY_TABLE[NUM_PIANO_KEYS];
 uint16_t SAWTOOTH_TABLE[NUM_PIANO_KEYS];
-int8_t SINE_TABLE[TABLE_SIZE];
 
 
 #define pgm_read_byte(x) *(uint8_t*)(x)
@@ -50,23 +49,6 @@ void InitializeTables()
 {
     int x;
 
-    printf("Sine Table\n----------\n");
-    printf("const int8_t sineTable[] PROGMEM = {");
-
-    for (x = 0 ; x < TABLE_SIZE ; x++)
-    {
-        SINE_TABLE[x] = (int8_t)(32*sin(2*M_PI*x/TABLE_SIZE));
-        printf("%d, ", SINE_TABLE[x]);
-    }
-    printf("};\n");
-
-    // TODO: Change this so that the frequency table is a 16bit integer.
-    // The high 8 bits are what we put in the FREQUENCY_TABLE now while
-    // the low 8 bits are the "error percent" in 256th's, making this
-    // essentially a fixed point floating point math.
-    // When we want to use the value, just use the high 8 bits to look
-    // up in the SINE_TABLE just as we do now.
-    //
     // Sawtooth waveform:
     // ------------------
     // Repeats every BITRATE / FREQUENCY

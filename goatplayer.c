@@ -7,7 +7,7 @@ uint8_t gNextOutputValue = 0;
 
 uint32_t totalTicks = 0;
 
-#define VBI_COUNT (16000 / 50)
+#define VBI_COUNT (BITRATE / 50)
 #define SONG_STEP_COUNT (3) // Essentially the tempo
 
 uint16_t vbiCount = VBI_COUNT;
@@ -20,16 +20,6 @@ const char *orderlist[3];
 // TODO: Optimize memory usage by reducing this value.
 // This alone takes a lot of the available RAM on an ATmega328
 const char *pattern[256];
-
-// The position in the orderlist for each channel
-uint8_t orderlistPosition[3];
-
-// The number of times remaining to repeat the current pattern before
-// moving to the next one
-uint8_t patternRepeatCountdown[3];
-
-// Pointer to the current position in the song data for each channel
-const char *songPosition[3];
 
 // SID Registers
 // 16 bit FREQUENCY
@@ -87,6 +77,8 @@ struct Voice
     // Amount to fade the current value (based on the current position in the ADSR envelope)
     uint8_t fadeAmount;
     
+    // Control bits (defined above)
+    uint8_t control;
 } channels[4];
 
 // Instrument definition
@@ -95,15 +87,42 @@ struct Instrument
     uint8_t attackDecay;     // +0      byte    Attack/Decay
     uint8_t sustainRelease;  // +1      byte    Sustain/Release
     uint8_t waveOffset;      // +2      byte    Wavepointer
-    uint8_t pulseOfset;      // +3      byte    Pulsepointer
+    uint8_t pulseOffset;     // +3      byte    Pulsepointer
     uint8_t filterOffset;    // +4      byte    Filterpointer
     uint8_t speedOffset;     // +5      byte    Vibrato param. (speedtable pointer)
     uint8_t vibratoDelay;    // +6      byte    Vibrato delay
     uint8_t gateoffTime;     // +7      byte    Gateoff timer
     uint8_t hardRestart;     // +8      byte    Hard restart/1st frame waveform
     char    name[16];        // +9      16      Instrument name
-} *instruments;
+} *gInstruments;
 
+uint8_t *gWavetable, *gPulsetable, *gFiltertable, *gSpeedtable;
+uint8_t gWavetableSize, gPulsetableSize, gFiltertableSize, gSpeedtableSize;
+
+struct Track
+{
+    // <0 means no instrument assigned yet
+    int8_t instrumentNumber;
+
+    uint8_t wavetablePosition;
+    uint8_t pulsetablePosition;
+    uint8_t speedtablePosition;
+    uint8_t waveformDelayCountdown;
+    uint8_t currentNote;
+    uint8_t originalNote;
+    
+    // Pointer to the current position in the song data
+    const char *songPosition;
+    
+    // The number of times remaining to repeat the current pattern before
+    // moving to the next one
+    uint8_t patternRepeatCountdown;
+
+    // The position in the orderlist
+    uint8_t orderlistPosition;
+
+} gTrackData[3];
+        
 #if TEST_MODE
 struct Instrument FakeInstruments[1] =
 {
@@ -203,17 +222,18 @@ void InitializeSong(const char *songdata)
     print8int(numInstruments);
     print("\n");
 
-    instruments = (struct Instrument *)data;
+    gInstruments = (struct Instrument *)data;
 
     for (i = 0 ; i < numInstruments ; i++)
     {
         data += 25;
         
-        uint8_t ad = pgm_read_byte(&instruments[i].attackDecay);
-        uint8_t sr = pgm_read_byte(&instruments[i].sustainRelease);
+        uint8_t ad = pgm_read_byte(&gInstruments[i].attackDecay);
+        uint8_t sr = pgm_read_byte(&gInstruments[i].sustainRelease);
+        uint8_t waveOffset = pgm_read_byte(&gInstruments[i].waveOffset);
         for (uint8_t x = 0 ; x < 16 ; x++)
         {
-            name[x] = pgm_read_byte(&instruments[i].name[x]);
+            name[x] = pgm_read_byte(&gInstruments[i].name[x]);
         }
         print("Instrument ");
         print8int(i);
@@ -223,32 +243,50 @@ void InitializeSong(const char *songdata)
         print(": ADSR 0x");
         print8hex(ad);
         print8hex(sr);
+        print(" WaveOffset: ");
+        print8int(waveOffset);
         print("\n");
     }
     
-    uint8_t size = pgm_read_byte(data++);
+    gWavetableSize = pgm_read_byte(data++);
     print("Wavetable Size: ");
-    print8int(size);
+    print8int(gWavetableSize);
     print("\n");
-    data += size * 2;
+    gWavetable = (uint8_t *)data;
+    for (i = 0 ; i < gWavetableSize ; i++)
+    {
+        print("0x");
+        print8hex(i);
+        uint8_t value = gWavetable[i];
+        print(" ");
+        print8hex(value);
+        print(" ");
+        value = gWavetable[i + gWavetableSize];
+        print8hex(value);
+        print("\n");        
+    }
+    data += gWavetableSize * 2;
 
-    size = pgm_read_byte(data++);
+    gPulsetableSize = pgm_read_byte(data++);
     print("Pulsetable Size: ");
-    print8int(size);
+    print8int(gPulsetableSize);
     print("\n");
-    data += size * 2;
+    gPulsetable = (uint8_t *)data;
+    data += gPulsetableSize * 2;
 
-    size = pgm_read_byte(data++);
+    gFiltertableSize = pgm_read_byte(data++);
     print("Filtertable Size: ");
-    print8int(size);
+    print8int(gFiltertableSize);
     print("\n");
-    data += size * 2;
+    gFiltertable = (uint8_t *)data;
+    data += gFiltertableSize * 2;
 
-    size = pgm_read_byte(data++);
+    gSpeedtableSize = pgm_read_byte(data++);
     print("Speedtable Size: ");
-    print8int(size);
+    print8int(gSpeedtableSize);
     print("\n");
-    data += size * 2;
+    gSpeedtable = (uint8_t *)data;
+    data += gSpeedtableSize * 2;
 
     uint8_t numPatterns = pgm_read_byte(data++);
     print("Number Patterns: ");
@@ -273,32 +311,34 @@ void InitializeSong(const char *songdata)
     for (uint8_t channel = 0 ; channel < 3 ; channel++)
     {
         // Start each channel at the first pattern in the order list
-        orderlistPosition[i] = 0;
-
+        gTrackData[channel].orderlistPosition = 0;
+        gTrackData[channel].instrumentNumber = -1;
+        gTrackData[channel].wavetablePosition = 0xFF;
+        
         uint8_t patternNumber;
         do
         {
             // Get the pattern number from the current position
-            patternNumber = pgm_read_byte(orderlist[channel] + orderlistPosition[channel]);
+            patternNumber = pgm_read_byte(orderlist[channel] + gTrackData[channel].orderlistPosition);
             if (patternNumber >= 0xD0 && patternNumber <= 0xDF)
             {
-                orderlistPosition[channel]++;
+                gTrackData[channel].orderlistPosition++;
                 uint8_t repeatCount = patternNumber & 0x0F;
                 if (repeatCount == 0)
                 {
                     repeatCount = 16;
                 }
-                patternRepeatCountdown[channel] = repeatCount;
+                gTrackData[channel].patternRepeatCountdown = repeatCount;
             }
             else if (patternNumber >= 0xE0 && patternNumber <= 0xFE)
             {
-                orderlistPosition[channel]++;
+                gTrackData[channel].orderlistPosition++;
                 // TODO: Handle transpose codes!
             }
         } while (patternNumber >= 0xD0);
         
         // Start each channel at the first song position for each pattern
-        songPosition[channel] = pattern[patternNumber];
+        gTrackData[channel].songPosition = pattern[patternNumber];
         print("Channel ");
         print8int(channel);
         print(" Initial Pattern: ");
@@ -309,14 +349,29 @@ void InitializeSong(const char *songdata)
 
 void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
 {
-    channels[channel].steps = pgm_read_word(&SAWTOOTH_TABLE[key]);
-    channels[channel].tableOffset = 0;
-    channels[channel].attackDecay = pgm_read_word(&instruments[instrument - 1].attackDecay);
-    channels[channel].sustainRelease = pgm_read_word(&instruments[instrument - 1].sustainRelease);
+    channels[channel].attackDecay = pgm_read_word(&gInstruments[instrument - 1].attackDecay);
+    channels[channel].sustainRelease = pgm_read_word(&gInstruments[instrument - 1].sustainRelease);
     channels[channel].fadeAmount = 32;
-    channels[channel].envelopePhase = Attack;
     channels[channel].phaseStepCountdown = AttackCycles[(channels[channel].attackDecay & 0xF0) >> 4];
-    // TODO: Store the instrument # so that if we use instrument #0, it keeps the same instrument as before (I think).
+    
+    gTrackData[channel].instrumentNumber = instrument;
+    gTrackData[channel].originalNote = key;
+    print("KeyOn Channel: ");
+    print8int(channel);
+    print(" Instrument: ");
+    print8int(instrument);
+    
+    gTrackData[channel].wavetablePosition = pgm_read_byte(&gInstruments[instrument].waveOffset);
+    
+    // Positions are stored as 1 based, but the wavetable data itself is stored 0 based
+    gTrackData[channel].wavetablePosition--;
+    
+    print(" WavetablePos: ");
+    print8int(gTrackData[channel].wavetablePosition);
+    print("\n");
+    gTrackData[channel].pulsetablePosition = pgm_read_byte(&gInstruments[instrument].pulseOffset);
+    gTrackData[channel].speedtablePosition = pgm_read_byte(&gInstruments[instrument].speedOffset);
+
     //printf("Instrument %u: AD: 0x%02X SR: 0x%02X ", instrument, channels[channel].attackDecay, channels[channel].sustainRelease);
     //printf("Key On: %u Attack Countdown: %u\n", key, channels[channel].phaseStepCountdown);
 }
@@ -331,6 +386,83 @@ void KeyOff(uint8_t channel)
 int GoatPlayerTick()
 {
     int songFinished = 0;
+    
+    // Handle the wavetable
+    for(uint8_t channel = 0 ; channel < 3 ; channel++)
+    {
+        if (gTrackData[channel].wavetablePosition == 0xFF)
+        {
+            continue;
+        }
+        
+        if (gTrackData[channel].instrumentNumber < 0)
+        {
+            continue;
+        }
+        
+        if (gTrackData[channel].patternRepeatCountdown > 0)
+        {
+            gTrackData[channel].patternRepeatCountdown--;
+            continue;
+        }
+        
+#if 1
+        print("Channel: ");
+        print8int(channel);
+        print(" Instrument: ");
+        print8int(gTrackData[channel].instrumentNumber);
+        print(" Wave Pos 0x");
+        print8hex(gTrackData[channel].wavetablePosition);
+#endif
+
+        uint8_t leftSide = pgm_read_byte(&gWavetable[gTrackData[channel].wavetablePosition]);
+        uint8_t rightSide = pgm_read_byte(&gWavetable[gTrackData[channel].wavetablePosition + gWavetableSize]);
+
+#if 1
+        print(" 0x");
+        print8hex(leftSide);
+        print(" ");
+        print8hex(rightSide);
+        print("\n");
+#endif
+        
+        if (leftSide >= 0x10 && leftSide <= 0xDF)
+        {
+            channels[channel].control = leftSide;
+            
+            // TODO: Find a way to combine waveforms.
+            //       Or actually, do I really want to support this?
+            if (leftSide & (CONTROL_SAWTOOTH | CONTROL_TRIANGLE))
+            {
+                channels[channel].steps = pgm_read_word(&SAWTOOTH_TABLE[gTrackData[channel].currentNote]);
+                channels[channel].tableOffset = 0;
+            }
+            
+            if (leftSide & CONTROL_GATE)
+            {
+                channels[channel].envelopePhase = Attack;
+            }
+        }
+        else if (leftSide == 0xFF)
+        {
+            if (rightSide == 0)
+            {
+                printf("Wavetable end\n");
+                gTrackData[channel].wavetablePosition = 0xFF;
+            }
+            else
+            {
+                gTrackData[channel].wavetablePosition = rightSide;
+                print("Wavetable jump to 0x");
+                print8hex(rightSide);
+                print("\n");
+            }
+            
+            continue;
+        }
+        
+        gTrackData[channel].wavetablePosition++;
+     }
     
     songStepCountdown--;
     if (songStepCountdown > 0)
@@ -348,13 +480,13 @@ int GoatPlayerTick()
         
         do
         {
-            note = pgm_read_byte(songPosition[channel]);
+            note = pgm_read_byte(gTrackData[channel].songPosition);
             if (note >= 0x60 && note <= 0xBC)
             {
-                instrument = pgm_read_byte(songPosition[channel] + 1);
+                instrument = pgm_read_byte(gTrackData[channel].songPosition + 1);
                 
                 note -= 0x60;
-                KeyOn(channel, note, instrument);
+                KeyOn(channel, note, instrument - 1);
 
                 // printf("NOTE ON -- Channel %u Note: %u Instrument: %u\n", channel, note, instrument);
             }
@@ -364,41 +496,41 @@ int GoatPlayerTick()
             }
             else if (note == 0xFF)
             {
-                if (patternRepeatCountdown[channel] > 0)
+                if (gTrackData[channel].patternRepeatCountdown > 0)
                 {
-                    patternRepeatCountdown[channel] -= 1;
-                    uint8_t patternNumber = pgm_read_byte(orderlist[channel] + orderlistPosition[channel]);
-                    songPosition[channel] = pattern[patternNumber];
+                    gTrackData[channel].patternRepeatCountdown -= 1;
+                    uint8_t patternNumber = pgm_read_byte(orderlist[channel] + gTrackData[channel].orderlistPosition);
+                    gTrackData[channel].songPosition = pattern[patternNumber];
                     continue;
                 }
                 
-                orderlistPosition[channel]++;
+                gTrackData[channel].orderlistPosition++;
 
                 uint8_t patternNumber;
                 do
                 {
                     // Get the pattern number from the current position
-                    patternNumber = pgm_read_byte(orderlist[channel] + orderlistPosition[channel]);
+                    patternNumber = pgm_read_byte(orderlist[channel] + gTrackData[channel].orderlistPosition);
 
                     if (patternNumber >= 0xD0 && patternNumber <= 0xDF)
                     {
-                        orderlistPosition[channel]++;
+                        gTrackData[channel].orderlistPosition++;
                         uint8_t repeatCount = patternNumber & 0x0F;
                         if (repeatCount == 0)
                         {
                             repeatCount = 16;
                         }
-                        patternRepeatCountdown[channel] = repeatCount;
+                        gTrackData[channel].patternRepeatCountdown = repeatCount;
                     }
                     else if (patternNumber >= 0xE0 && patternNumber <= 0xFE)
                     {
-                        orderlistPosition[channel]++;
+                        gTrackData[channel].orderlistPosition++;
                         // TODO: Handle transpose codes!
                     }
                     else if (patternNumber == 0xFF)
                     {
-                        orderlistPosition[channel]++;
-                        patternNumber = pgm_read_byte(orderlist[channel] + orderlistPosition[channel]);
+                        gTrackData[channel].orderlistPosition++;
+                        patternNumber = pgm_read_byte(orderlist[channel] + gTrackData[channel].orderlistPosition);
 
                         print("END ");
                         print8int(channel);
@@ -406,7 +538,7 @@ int GoatPlayerTick()
                         print8int(patternNumber);
                         print("\n");
 
-                        orderlistPosition[channel] = patternNumber;
+                        gTrackData[channel].orderlistPosition = patternNumber;
 
                         songFinished = 1;
                     }
@@ -419,13 +551,13 @@ int GoatPlayerTick()
                         print("\n");
                     }
                     
-                    songPosition[channel] = pattern[patternNumber];
+                    gTrackData[channel].songPosition = pattern[patternNumber];
                 } while (patternNumber >= 0xD0);
             }
         } while (note == 0xFF);
 
         // TODO: Handle all the rest of the interesting parts
-        songPosition[channel] += 4;
+        gTrackData[channel].songPosition += 4;
     }
 
     return songFinished;
@@ -450,12 +582,12 @@ int OutputAudioAndCalculateNextByte(void)
         
         if (channels[channel].envelopePhase != Off)
         {
-            //printf("Channel %u Offset: 0x%04X + Steps: 0x%04X = ", channel, channels[channel].tableOffset, channels[channel].steps);
+            printf("Channel %u Offset: 0x%04X + Steps: 0x%04X = ", channel, channels[channel].tableOffset, channels[channel].steps);
             channels[channel].tableOffset += channels[channel].steps;
-            //printf("0x%04X ", channels[channel].tableOffset);
+            printf("0x%04X ", channels[channel].tableOffset);
 
             uint16_t offset = channels[channel].tableOffset >> 8;
-            //printf("Offset: 0x%04X ", offset);
+            printf("Offset: 0x%04X ", offset);
             
             if (offset >= 64)
             {
@@ -464,25 +596,38 @@ int OutputAudioAndCalculateNextByte(void)
                 channels[channel].tableOffset |= offset << 8;
             }
 
-#if 1 // SAWTOOTH
-            int8_t waveformValue = offset - 32;
-#else // TRIANGLE
-            int8_t waveformValue = offset * 2;
-            if (waveformValue >= 64)
-            {
-              waveformValue = 128 - waveformValue;
-            }
-            waveformValue -= 32;
-#endif
-            // NOISE
-            //waveformValue = (gNoise & 0x3F) - 32;
+            int8_t waveformValue;
             
-            // printf("Wave: %d\n", waveformValue);
+            if (channels[channel].control & CONTROL_SAWTOOTH)
+            {
+                printf(" SAWTOOTH ");
+                waveformValue = offset - 32;
+            }
+            else if (channels[channel].control & CONTROL_TRIANGLE)
+            {
+                printf(" TRIANGLE ");
+                waveformValue = offset * 2;
+                if (waveformValue >= 64)
+                {
+                    waveformValue = 128 - waveformValue;
+                }
+                waveformValue -= 32;
+            }
+            else if (channels[channel].control & CONTROL_PULSE)
+            {
+                // TODO: Implement the pulse waveform
+                printf(" PULSE ");
+            }
+            else if (channels[channel].control & CONTROL_NOISE)
+            {
+                print(" NOISE ");
+                waveformValue = (gNoise & 0x3F) - 32;
+            }
             
             int16_t shortWaveformValue = (int16_t)waveformValue;
             int8_t fadedValue = (int8_t) (shortWaveformValue * (32 - channels[channel].fadeAmount) / 32);
-            //printf("waveform: %2d short: %2d fadeAmount: %2u faded: %2d\n",
-            //        waveformValue, shortWaveformValue, channels[channel].fadeAmount, fadedValue);
+            printf("waveform: %2d short: %2d fadeAmount: %2u phase: %d faded: %2d\n",
+                    waveformValue, shortWaveformValue, channels[channel].fadeAmount, channels[channel].envelopePhase, fadedValue);
             
             outputValue += fadedValue;
 

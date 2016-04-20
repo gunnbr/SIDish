@@ -70,7 +70,7 @@ void InitializeTables()
         FREQUENCY_TABLE[x] = ((uint16_t)frequencySteps << 16) | ((uint16_t)error & 0xFFFF);
 
         // Calculate the steps for the sawtooth table
-        steps = 64.0 / ((double)BITRATE / frequency);
+        steps = frequency * 64.0 / (double)BITRATE;
         frequencySteps = (uint16_t)steps;
         error = (uint16_t)floor(steps * 256 - frequencySteps * 256);
         SAWTOOTH_TABLE[x] = (frequencySteps << 8) | (error & 0xFF);

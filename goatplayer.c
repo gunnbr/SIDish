@@ -440,6 +440,7 @@ int GoatPlayerTick()
             if (leftSide & (CONTROL_SAWTOOTH | CONTROL_TRIANGLE))
             {
                 // TODO: Process the right side to figure out what note to use
+                //       For now just use the original note
                 gTrackData[channel].currentNote = gTrackData[channel].originalNote;
 
                 printf("Setting steps for SAWTRI, note %d\n", gTrackData[channel].currentNote);
@@ -448,6 +449,18 @@ int GoatPlayerTick()
                 channels[channel].tableOffset = 0;
             }
             
+            if (leftSide & CONTROL_PULSE)
+            {
+                // TODO: Process the right side to figure out what note to use
+                // TODO: Implement proper pulse waveform
+                gTrackData[channel].currentNote = gTrackData[channel].originalNote;
+
+                printf("Setting steps for PULSE (as SAWTOOTH), note %d\n", gTrackData[channel].currentNote);
+                
+                channels[channel].steps = pgm_read_word(&SAWTOOTH_TABLE[gTrackData[channel].currentNote]);
+                channels[channel].tableOffset = 0;
+            }
+
             if (leftSide & CONTROL_GATE)
             {
                 channels[channel].envelopePhase = Attack;
@@ -627,7 +640,8 @@ int OutputAudioAndCalculateNextByte(void)
             else if (channels[channel].control & CONTROL_PULSE)
             {
                 // TODO: Implement the pulse waveform
-                //printf(" PULSE ");
+                // TEMPORARILY play sawtooth instead of pulse
+                waveformValue = offset - 32;
             }
             else if (channels[channel].control & CONTROL_NOISE)
             {

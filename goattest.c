@@ -93,6 +93,7 @@ void InitializeTables()
 
 #define SONGNAME "Comic_Bakery.sng"
 //#define SONGNAME "EnvelopeTest.sng"
+//#define SONGNAME "SquareTest.sng"
 
 int main(void)
 {

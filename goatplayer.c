@@ -67,7 +67,7 @@ struct Voice
     // Envelope values
     uint8_t attackDecay;
     uint8_t sustainRelease;
-    
+
     // Current phase in the envelope generator
     enum EnvelopePhase envelopePhase;
 
@@ -79,6 +79,9 @@ struct Voice
     
     // Control bits (defined above)
     uint8_t control;
+
+    // Pulse values
+    uint16_t pulseWidth;
 } channels[4];
 
 // Instrument definition
@@ -452,13 +455,19 @@ int GoatPlayerTick()
             if (leftSide & CONTROL_PULSE)
             {
                 // TODO: Process the right side to figure out what note to use
-                // TODO: Implement proper pulse waveform
                 gTrackData[channel].currentNote = gTrackData[channel].originalNote;
 
-                printf("Setting steps for PULSE (as SAWTOOTH), note %d\n", gTrackData[channel].currentNote);
+                printf("Setting steps for PULSE, note %d\n", gTrackData[channel].currentNote);
                 
+                // Use the same table. We'll multiply the pulsetable value by 4 to scale
+                // it from 16.00 to 64.00
                 channels[channel].steps = pgm_read_word(&SAWTOOTH_TABLE[gTrackData[channel].currentNote]);
                 channels[channel].tableOffset = 0;
+                
+                // Until the pulsetable is implemented, just set the width to the halfway
+                // point (0x800), scaled to our table
+                // TODO: Remove this after the pulsetable is implemented
+                channels[channel].pulseWidth = 0x800 << 2;
             }
 
             if (leftSide & CONTROL_GATE)
@@ -639,9 +648,14 @@ int OutputAudioAndCalculateNextByte(void)
             }
             else if (channels[channel].control & CONTROL_PULSE)
             {
-                // TODO: Implement the pulse waveform
-                // TEMPORARILY play sawtooth instead of pulse
-                waveformValue = offset - 32;
+                if (channels[channel].tableOffset < channels[channel].pulseWidth)
+                {
+                    waveformValue = 31;
+                }
+                else
+                {
+                    waveformValue = -32;
+                }
             }
             else if (channels[channel].control & CONTROL_NOISE)
             {

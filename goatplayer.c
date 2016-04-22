@@ -121,6 +121,17 @@ struct Track
     // moving to the next one
     uint8_t patternRepeatCountdown;
 
+    // The number of times remaining to delay on the current wavetable
+    // position before continuing
+    uint8_t wavetableDelay;
+    
+    // The number of times remaining to repeat the current pulse instruction
+    // before moving to the next one
+    uint8_t pulseRepeatCountdown;
+    
+    // The amount to change the pulseWidth every song tick 
+    int8_t pulseChange;
+    
     // The position in the orderlist
     uint8_t orderlistPosition;
 
@@ -369,15 +380,22 @@ void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
     gTrackData[channel].originalNote = key;
     
     gTrackData[channel].wavetablePosition = pgm_read_byte(&gInstruments[instrument].waveOffset);
+    gTrackData[channel].pulsetablePosition = pgm_read_byte(&gInstruments[instrument].pulseOffset);
     
-    // Positions are stored as 1 based, but the wavetable data itself is stored 0 based
+    // Positions are stored as 1 based, but the table data itself is stored 0 based
     gTrackData[channel].wavetablePosition--;
+    gTrackData[channel].pulsetablePosition--;
     
     print(" WavetablePos: ");
     print8int(gTrackData[channel].wavetablePosition);
+    print(" PulsetablePos: ");
+    print8int(gTrackData[channel].pulsetablePosition);
     print("\n");
-    gTrackData[channel].pulsetablePosition = pgm_read_byte(&gInstruments[instrument].pulseOffset);
     gTrackData[channel].speedtablePosition = pgm_read_byte(&gInstruments[instrument].speedOffset);
+
+    // Reset the table positions (may not want to do this in the future depending on 
+    // what the song specifies
+    gTrackData[channel].pulseRepeatCountdown = 0;
 
     //printf("Instrument %u: AD: 0x%02X SR: 0x%02X ", instrument, channels[channel].attackDecay, channels[channel].sustainRelease);
     //printf("Key On: %u Attack Countdown: %u\n", key, channels[channel].phaseStepCountdown);
@@ -408,9 +426,9 @@ int GoatPlayerTick()
             continue;
         }
         
-        if (gTrackData[channel].patternRepeatCountdown > 0)
+        if (gTrackData[channel].wavetableDelay > 0)
         {
-            gTrackData[channel].patternRepeatCountdown--;
+            gTrackData[channel].wavetableDelay--;
             continue;
         }
         
@@ -434,7 +452,11 @@ int GoatPlayerTick()
         print("\n");
 #endif
         
-        if (leftSide >= 0x10 && leftSide <= 0xDF)
+        if (leftSide >= 0x01 && leftSide <= 0x0F)
+        {
+            gTrackData[channel].wavetableDelay = leftSide;
+        }
+        else if (leftSide >= 0x10 && leftSide <= 0xDF)
         {
             channels[channel].control = leftSide;
             
@@ -494,7 +516,84 @@ int GoatPlayerTick()
         }
         
         gTrackData[channel].wavetablePosition++;
-     }
+    }
+    
+    // Handle the pulsetable
+    for(uint8_t channel = 0 ; channel < 3 ; channel++)
+    {
+        if (gTrackData[channel].pulsetablePosition == 0xFF)
+        {
+            continue;
+        }
+        
+        if (gTrackData[channel].instrumentNumber < 0)
+        {
+            continue;
+        }
+        
+        if (gTrackData[channel].pulseRepeatCountdown > 0)
+        {
+            channels[channel].pulseWidth += gTrackData[channel].pulseChange; 
+            gTrackData[channel].pulseRepeatCountdown--;
+            continue;
+        }
+        
+#if 1
+        print("Channel: ");
+        print8int(channel);
+        print(" Instrument: ");
+        print8int(gTrackData[channel].instrumentNumber);
+        print(" Pulse Pos 0x");
+        print8hex(gTrackData[channel].pulsetablePosition);
+#endif
+
+        uint8_t leftSide = pgm_read_byte(&gPulsetable[gTrackData[channel].pulsetablePosition]);
+        uint8_t rightSide = pgm_read_byte(&gPulsetable[gTrackData[channel].pulsetablePosition + gPulsetableSize]);
+
+#if 1
+        print(" 0x");
+        print8hex(leftSide);
+        print(" ");
+        print8hex(rightSide);
+        print("\n");
+#endif
+        
+        if (leftSide == 0xFF)
+        {
+            if (rightSide == 0)
+            {
+                printf("Pulsetable end\n");
+                gTrackData[channel].pulsetablePosition = 0xFF;
+            }
+            else
+            {
+                gTrackData[channel].pulsetablePosition = rightSide;
+                print("Pulsetable jump to 0x");
+                print8hex(rightSide);
+                print("\n");
+            }
+            
+            continue;
+            
+        }
+        else if (leftSide < 0x80)
+        {
+            // Set pulse change parameters
+            gTrackData[channel].pulseRepeatCountdown = leftSide;
+            gTrackData[channel].pulseChange = (int8_t) rightSide;
+        }
+        else
+        {
+            // Directly set the pulse width
+            channels[channel].pulseWidth = ((leftSide & 0x0F) << 8) | rightSide;
+            print("Set pulsewidth to 0x");
+            print8hex(leftSide & 0x0F);
+            print8hex(rightSide);
+            print("\n");
+        }
+        
+        gTrackData[channel].pulsetablePosition++;
+    }
     
     songStepCountdown--;
     if (songStepCountdown > 0)

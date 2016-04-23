@@ -271,11 +271,11 @@ void InitializeSong(const char *songdata)
     {
         print("0x");
         print8hex(i);
-        uint8_t value = gWavetable[i];
+        uint8_t value = pgm_read_byte(&gWavetable[i]);
         print(" ");
         print8hex(value);
         print(" ");
-        value = gWavetable[i + gWavetableSize];
+        value = pgm_read_byte(&gWavetable[i + gWavetableSize]);
         print8hex(value);
         print("\n");        
     }
@@ -364,13 +364,16 @@ void InitializeSong(const char *songdata)
 void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
 {
     instrument--;
+    
+#if 0
     print("KeyOn Channel: ");
     print8int(channel);
     print(" Instrument: ");
     print8int(instrument);
     print(" Note: ");
     print8int(key);
-    
+#endif
+
     channels[channel].attackDecay = pgm_read_byte(&gInstruments[instrument].attackDecay);
     channels[channel].sustainRelease = pgm_read_byte(&gInstruments[instrument].sustainRelease);
     channels[channel].fadeAmount = 32;
@@ -386,11 +389,14 @@ void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
     gTrackData[channel].wavetablePosition--;
     gTrackData[channel].pulsetablePosition--;
     
+#if 0
     print(" WavetablePos: ");
     print8int(gTrackData[channel].wavetablePosition);
     print(" PulsetablePos: ");
     print8int(gTrackData[channel].pulsetablePosition);
     print("\n");
+#endif
+
     gTrackData[channel].speedtablePosition = pgm_read_byte(&gInstruments[instrument].speedOffset);
 
     // Reset the table positions (may not want to do this in the future depending on 
@@ -403,7 +409,7 @@ void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
 
 void KeyOff(uint8_t channel)
 {
-    printf("KeyOff(%u)\n", channel);
+    //printf("KeyOff(%u)\n", channel);
     channels[channel].envelopePhase = Release;
     channels[channel].phaseStepCountdown = DecayReleaseCycles[channels[channel].sustainRelease & 0x0F];
 }
@@ -432,7 +438,7 @@ int GoatPlayerTick()
             continue;
         }
         
-#if 1
+#if 0
         print("Channel: ");
         print8int(channel);
         print(" Instrument: ");
@@ -444,7 +450,7 @@ int GoatPlayerTick()
         uint8_t leftSide = pgm_read_byte(&gWavetable[gTrackData[channel].wavetablePosition]);
         uint8_t rightSide = pgm_read_byte(&gWavetable[gTrackData[channel].wavetablePosition + gWavetableSize]);
 
-#if 1
+#if 0
         print(" 0x");
         print8hex(leftSide);
         print(" ");
@@ -468,7 +474,7 @@ int GoatPlayerTick()
                 //       For now just use the original note
                 gTrackData[channel].currentNote = gTrackData[channel].originalNote;
 
-                printf("Setting steps for SAWTRI, note %d\n", gTrackData[channel].currentNote);
+                //printf("Setting steps for SAWTRI, note %d\n", gTrackData[channel].currentNote);
                 
                 channels[channel].steps = pgm_read_word(&SAWTOOTH_TABLE[gTrackData[channel].currentNote]);
                 channels[channel].tableOffset = 0;
@@ -479,7 +485,7 @@ int GoatPlayerTick()
                 // TODO: Process the right side to figure out what note to use
                 gTrackData[channel].currentNote = gTrackData[channel].originalNote;
 
-                printf("Setting steps for PULSE, note %d\n", gTrackData[channel].currentNote);
+                //printf("Setting steps for PULSE, note %d\n", gTrackData[channel].currentNote);
                 
                 // Use the same table. We'll multiply the pulsetable value by 4 to scale
                 // it from 16.00 to 64.00
@@ -501,7 +507,7 @@ int GoatPlayerTick()
         {
             if (rightSide == 0)
             {
-                printf("Wavetable end\n");
+                //printf("Wavetable end\n");
                 gTrackData[channel].wavetablePosition = 0xFF;
             }
             else
@@ -538,7 +544,7 @@ int GoatPlayerTick()
             continue;
         }
         
-#if 1
+#if 0
         print("Channel: ");
         print8int(channel);
         print(" Instrument: ");
@@ -550,7 +556,7 @@ int GoatPlayerTick()
         uint8_t leftSide = pgm_read_byte(&gPulsetable[gTrackData[channel].pulsetablePosition]);
         uint8_t rightSide = pgm_read_byte(&gPulsetable[gTrackData[channel].pulsetablePosition + gPulsetableSize]);
 
-#if 1
+#if 0
         print(" 0x");
         print8hex(leftSide);
         print(" ");
@@ -562,7 +568,7 @@ int GoatPlayerTick()
         {
             if (rightSide == 0)
             {
-                printf("Pulsetable end\n");
+                //printf("Pulsetable end\n");
                 gTrackData[channel].pulsetablePosition = 0xFF;
             }
             else
@@ -586,10 +592,12 @@ int GoatPlayerTick()
         {
             // Directly set the pulse width
             channels[channel].pulseWidth = ((leftSide & 0x0F) << 8) | rightSide;
+#if 0
             print("Set pulsewidth to 0x");
             print8hex(leftSide & 0x0F);
             print8hex(rightSide);
             print("\n");
+#endif
         }
         
         gTrackData[channel].pulsetablePosition++;
@@ -783,7 +791,7 @@ int OutputAudioAndCalculateNextByte(void)
                         //printf("Done attacking. SR = 0x%02X\n", channels[channel].sustainRelease);
                         uint8_t sustainLevel = (channels[channel].sustainRelease & 0xF0) >> 4;
                         //printf("SustainLevel = %u\n", sustainLevel);
-                        uint8_t sustainFadeValue = 0x0F - ((channels[channel].sustainRelease & 0xF0) >> 4);
+                        uint8_t sustainFadeValue = 0x0F - sustainLevel;
                         sustainFadeValue <<= 1;
                         
                         //printf("FadeValue = %u\n", sustainFadeValue);

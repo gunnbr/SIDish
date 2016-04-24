@@ -378,6 +378,7 @@ void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
     channels[channel].sustainRelease = pgm_read_byte(&gInstruments[instrument].sustainRelease);
     channels[channel].fadeAmount = 32;
     channels[channel].phaseStepCountdown = AttackCycles[(channels[channel].attackDecay & 0xF0) >> 4];
+    channels[channel].envelopePhase = Off;
     
     gTrackData[channel].instrumentNumber = instrument;
     gTrackData[channel].originalNote = key;
@@ -498,9 +499,21 @@ int GoatPlayerTick()
                 channels[channel].pulseWidth = 0x800 << 2;
             }
 
+            // TODO: Move all the handline of what happens with the
+            //       GATE to be in the SIDish part, not the player part
             if (leftSide & CONTROL_GATE)
             {
-                channels[channel].envelopePhase = Attack;
+                if (channels[channel].envelopePhase == Off)
+                {
+                    channels[channel].envelopePhase = Attack;
+                }
+            }
+            else
+            {
+                if (channels[channel].envelopePhase != Off)
+                {
+                    KeyOff(channel);
+                }    
             }
         }
         else if (leftSide == 0xFF)
@@ -844,7 +857,7 @@ int OutputAudioAndCalculateNextByte(void)
                 case Release:
                     // Fade from the sustain level to 0 (fadeAmount of 32)
                     channels[channel].fadeAmount++;
-                    if (channels[channel].fadeAmount == 32)
+                    if (channels[channel].fadeAmount >= 32)
                     {
                         channels[channel].envelopePhase = Off;
                     }

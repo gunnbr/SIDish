@@ -26,13 +26,6 @@ Since I grew up with the Commodore 64, I've always loved the kind of music it ge
 I don't think there's anything wrong with the Miduino at all, I just wanted to see if I could do any better.
 
 ## Status
-The current status is that I prototype in python writing out .wav files. Once I get results I want, I port the code to the 328 and test and debug there.
-I currently have a python script that reads a midi file (my currently sample uses sid2midi to convert one of my favorite C64 tunes) and outputs a format I use to output a tune.
-The audio is being output only with sine waves at the moment because my first attempt at pulse waves sounded really rough and I wanted to try to do better. However, my sine wave output also has problems and isn't necessary to emulate a SID chip anyway, so I'll work on the other waveforms now.
-There are many different ways to get audio out from the Arduino, but I happened to have an [Adafruit Wave Shield](https://www.adafruit.com/product/94) which has a 10 bit DAC and a headphone jack which is exactly what I needed to experiment on the couch without bothering anyone else, so that's what I've been using.
-
-## Notes
-I am not a strong Python programmer. I use small projects like this to boost my Python skills. However, it does seem like Python may
-not have been a particularly good choice here. I keep trying to write the Python code as if it's an embedded system, but Python
-really doesn't like that, specifically using global variables and dealing with raw binary data. I'll see how much longer I keep
-trying to use Python for this. I feel like I keep fighting with it and then I still have to end up porting it to C in the end anyway.
+The current status is that basic support for playing goattracker files works. Not everything is implemented or works
+correctly, but songs are okay to recognizable. It can be compiled both to write out .wav files on the host system or play in realtime on an ATmega.
+ATmega output works for both PWM output on a single pin or to the [Adafruit Wave Shield](https://www.adafruit.com/product/94). It happens to have a 10 bit DAC and a headphone jack which is exactly what I needed to experiment on the couch without bothering anyone else, so that's what I've been using.

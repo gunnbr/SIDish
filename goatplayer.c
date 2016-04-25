@@ -8,7 +8,7 @@ uint8_t gNextOutputValue = 0;
 uint32_t totalTicks = 0;
 
 #define VBI_COUNT (BITRATE / 50)
-#define SONG_STEP_COUNT (3) // Essentially the tempo
+#define SONG_STEP_COUNT (4) // Essentially the tempo
 
 uint16_t vbiCount = VBI_COUNT;
 uint8_t songStepCountdown = 1;
@@ -471,9 +471,23 @@ int GoatPlayerTick()
             //       Or actually, do I really want to support this?
             if (leftSide & (CONTROL_SAWTOOTH | CONTROL_TRIANGLE))
             {
-                // TODO: Process the right side to figure out what note to use
-                //       For now just use the original note
-                gTrackData[channel].currentNote = gTrackData[channel].originalNote;
+                if (rightSide <= 0x5F)
+                {
+                    gTrackData[channel].currentNote = gTrackData[channel].originalNote + rightSide;
+                }
+                else if (rightSide <= 0x7F)
+                {
+                    // TODO: Verify this algorithm is correct
+                    gTrackData[channel].currentNote = gTrackData[channel].originalNote - (rightSide - 0x60);
+                }
+                else if (rightSide == 0x80)
+                {
+                    gTrackData[channel].currentNote = gTrackData[channel].originalNote;
+                }
+                else if (rightSide <= 0xDF)
+                {
+                    gTrackData[channel].currentNote = rightSide - 0x81;
+                }
 
                 //printf("Setting steps for SAWTRI, note %d\n", gTrackData[channel].currentNote);
                 
@@ -483,9 +497,24 @@ int GoatPlayerTick()
             
             if (leftSide & CONTROL_PULSE)
             {
-                // TODO: Process the right side to figure out what note to use
-                gTrackData[channel].currentNote = gTrackData[channel].originalNote;
-
+                if (rightSide <= 0x5F)
+                {
+                    gTrackData[channel].currentNote = gTrackData[channel].originalNote + rightSide;
+                }
+                else if (rightSide <= 0x7F)
+                {
+                    // TODO: Verify this algorithm is correct
+                    gTrackData[channel].currentNote = gTrackData[channel].originalNote - (rightSide - 0x60);
+                }
+                else if (rightSide == 0x80)
+                {
+                    gTrackData[channel].currentNote = gTrackData[channel].originalNote;
+                }
+                else if (rightSide <= 0xDF)
+                {
+                    gTrackData[channel].currentNote = rightSide - 0x81;
+                }
+                
                 //printf("Setting steps for PULSE, note %d\n", gTrackData[channel].currentNote);
                 
                 // Use the same table. We'll multiply the pulsetable value by 4 to scale
@@ -525,10 +554,11 @@ int GoatPlayerTick()
             }
             else
             {
-                gTrackData[channel].wavetablePosition = rightSide;
-                print("Wavetable jump to 0x");
-                print8hex(rightSide);
-                print("\n");
+                // rightSide is 1 based while the data is 0 based, so subtract 1
+                gTrackData[channel].wavetablePosition = rightSide - 1;
+                //print("Wavetable jump to 0x");
+                //print8hex(rightSide);
+                //print("\n");
             }
             
             continue;

@@ -41,5 +41,13 @@ Feature status:
 | ADSR envelope | Works |
 | Pulsetable support | Works |
 | Wavetable support | Partial |
+| Portamento | Not implemented |
+| Toneportamento | Not implemented |
+| Vibrato | Not implemented |
+| Alter ADSR from wavetable | Not implemented |
+| Filter | Not implemented |
+| Set master volumne | Not implemented |
+| Funktempo | Not implemented |
+| Set tempo | Not implemented |
 
 

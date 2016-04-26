@@ -44,7 +44,7 @@ Feature status:
 | Portamento | Not implemented |
 | Toneportamento | Not implemented |
 | Vibrato | Not implemented |
-| Alter ADSR from wavetable | Not implemented |
+| Alter ADSR from pattern data | Not implemented |
 | Filter | Not implemented |
 | Set master volumne | Not implemented |
 | Funktempo | Not implemented |

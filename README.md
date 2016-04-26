@@ -31,6 +31,7 @@ correctly, but songs are okay to recognizable. It can be compiled both to write 
 ATmega output works for both PWM output on a single pin or to the [Adafruit Wave Shield](https://www.adafruit.com/product/94). It happens to have a 10 bit DAC and a headphone jack which is exactly what I needed to experiment on the couch without bothering anyone else, so that's what I've been using.
 
 Feature status:
+
 | Feature      | Status  |
 | ------------- | ----- |
 | Sawtooth Wave | Works |

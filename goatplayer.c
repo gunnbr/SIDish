@@ -8,13 +8,15 @@ uint8_t gNextOutputValue = 0;
 uint32_t totalTicks = 0;
 
 #define VBI_COUNT (BITRATE / 50)
-#define SONG_STEP_COUNT (4) // Essentially the tempo
 
 uint16_t vbiCount = VBI_COUNT;
 uint8_t songStepCountdown = 1;
+uint8_t gTempo = 4; // Default Goattracker tempo
 
 // Pointer to the start of each orderlist.
-const char *orderlist[3];
+// TODO: Deal with the subtunes in a better way
+#define MAX_SUBTUNES (20)
+const char *orderlist[MAX_SUBTUNES][3];
 
 // Pointer to the start of each pattern.
 // TODO: Optimize memory usage by reducing this value.
@@ -149,10 +151,15 @@ void EnableFakeInstruments()
 }
 #endif
 
+// Start of the song data -- only needed for testing 
+// by printing the offsets
+const char *gSongData;
+
 void InitializeSong(const char *songdata)
 {
     const char *data = songdata;
-
+    gSongData = songdata;
+    
     print("\n\n\n******** Initializing *******\n\n");
     
     uint32_t header = pgm_read_dword(data);
@@ -192,16 +199,20 @@ void InitializeSong(const char *songdata)
     print(name);
     print("\n");
 
-    uint8_t subtunes = pgm_read_byte(data++);
+    uint8_t numSubtunes = pgm_read_byte(data++);
     print("# subtunes: ");
-    print8int(subtunes);
+    print8int(numSubtunes);
+    if (numSubtunes > MAX_SUBTUNES)
+    {
+        print(" ****** ERROR: > MAX_SUBTUNES ******");
+    }
     print("\n");
 
-    for(i = 0 ; i < subtunes ; i++)
+    for(int subtune = 0 ; subtune < numSubtunes ; subtune++)
     {
         // TODO: Handle multiple subtunes
         uint8_t size = pgm_read_byte(data++);
-        orderlist[0] = data;
+        orderlist[subtune][0] = data;
         data += size + 1;
 
         print("Subtune ");
@@ -211,7 +222,7 @@ void InitializeSong(const char *songdata)
         print("\n");
 
         size = pgm_read_byte(data++);
-        orderlist[1] = data;
+        orderlist[subtune][1] = data;
         data += size + 1;
 
         print("Subtune ");
@@ -221,7 +232,7 @@ void InitializeSong(const char *songdata)
         print("\n");
 
         size = pgm_read_byte(data++);
-        orderlist[2] = data;
+        orderlist[subtune][2] = data;
         data += size + 1;
         
         print("Subtune ");
@@ -316,6 +327,10 @@ void InitializeSong(const char *songdata)
         print8int(i);
         print(": Rows ");
         print8int(length);
+#if 0
+        print(" Offset: ");
+        printf("0x%X", data - gSongData);
+#endif
         print("\n");
 
         data += 4*length;
@@ -333,7 +348,7 @@ void InitializeSong(const char *songdata)
         do
         {
             // Get the pattern number from the current position
-            patternNumber = pgm_read_byte(orderlist[channel] + gTrackData[channel].orderlistPosition);
+            patternNumber = pgm_read_byte(orderlist[0][channel] + gTrackData[channel].orderlistPosition);
             if (patternNumber >= 0xD0 && patternNumber <= 0xDF)
             {
                 gTrackData[channel].orderlistPosition++;
@@ -617,9 +632,11 @@ int GoatPlayerTick()
             else
             {
                 gTrackData[channel].pulsetablePosition = rightSide;
+#if 0
                 print("Pulsetable jump to 0x");
                 print8hex(rightSide);
                 print("\n");
+#endif
             }
             
             continue;
@@ -653,19 +670,39 @@ int GoatPlayerTick()
         return songFinished;
     }
 
-    songStepCountdown = SONG_STEP_COUNT;
+    songStepCountdown = gTempo;
 
+    // Handle the pattern data
     for(uint8_t channel = 0; channel < 3 ; channel++)
     {
         uint8_t note;
+        uint8_t command;
+        uint16_t data;
         uint8_t instrument;
         
         do
         {
             note = pgm_read_byte(gTrackData[channel].songPosition);
+            instrument = pgm_read_byte(gTrackData[channel].songPosition + 1);
+            command = pgm_read_byte(gTrackData[channel].songPosition + 2);
+            data = pgm_read_byte(gTrackData[channel].songPosition + 3);
+#if 0
+            printf("Channel %u (0x%X): %02X %02X %X %02X\n", channel,
+                gTrackData[channel].songPosition - gSongData, note, instrument, command, data);
+#endif
+       
+            switch (command)
+            {
+                case 0x0F: // Set tempo
+                    gTempo = data;
+                    print("Set tempo: ");
+                    print8hex(data);
+                    print("\n");
+                    break;
+            }
+            
             if (note >= 0x60 && note <= 0xBC)
             {
-                instrument = pgm_read_byte(gTrackData[channel].songPosition + 1);
                 
                 // In testing, I have to subtract 0x68 to get the key I expect
                 note -= 0x68;
@@ -682,7 +719,7 @@ int GoatPlayerTick()
                 if (gTrackData[channel].patternRepeatCountdown > 0)
                 {
                     gTrackData[channel].patternRepeatCountdown -= 1;
-                    uint8_t patternNumber = pgm_read_byte(orderlist[channel] + gTrackData[channel].orderlistPosition);
+                    uint8_t patternNumber = pgm_read_byte(orderlist[0][channel] + gTrackData[channel].orderlistPosition);
                     gTrackData[channel].songPosition = pattern[patternNumber];
                     continue;
                 }
@@ -693,7 +730,7 @@ int GoatPlayerTick()
                 do
                 {
                     // Get the pattern number from the current position
-                    patternNumber = pgm_read_byte(orderlist[channel] + gTrackData[channel].orderlistPosition);
+                    patternNumber = pgm_read_byte(orderlist[0][channel] + gTrackData[channel].orderlistPosition);
 
                     if (patternNumber >= 0xD0 && patternNumber <= 0xDF)
                     {
@@ -713,7 +750,7 @@ int GoatPlayerTick()
                     else if (patternNumber == 0xFF)
                     {
                         gTrackData[channel].orderlistPosition++;
-                        patternNumber = pgm_read_byte(orderlist[channel] + gTrackData[channel].orderlistPosition);
+                        patternNumber = pgm_read_byte(orderlist[0][channel] + gTrackData[channel].orderlistPosition);
 
                         print("END ");
                         print8int(channel);
@@ -740,7 +777,9 @@ int GoatPlayerTick()
         } while (note == 0xFF);
 
         // TODO: Handle all the rest of the interesting parts
+        //printf("Channel %u song position: 0x%p + 4 = ", channel, gTrackData[channel].songPosition);
         gTrackData[channel].songPosition += 4;
+        //printf("0x%p\n", gTrackData[channel].songPosition);
     }
 
     return songFinished;
@@ -811,6 +850,10 @@ int OutputAudioAndCalculateNextByte(void)
             {
                 //print(" NOISE ");
                 waveformValue = (gNoise & 0x3F) - 32;
+            }
+            else
+            {
+                waveformValue = 0;
             }
             
             int16_t shortWaveformValue = (int16_t)waveformValue;

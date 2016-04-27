@@ -34,11 +34,14 @@ Feature status:
 
 | Group | Feature      | Status |
 | ----- | ------------ | ------ |
-| General Features | | |
+| Synthesizer Features | | |
 | | Sawtooth Wave | Works |
 | | Triangle Waveform | Works |
 | | Pulse Waveform | Works |
 | | Variable pulse width | Works |
+| | Synchronize | Not implemented |
+| | Ring modulation | Not implemented |
+| | Multiple simultaneous waveforms per channel | Not implemented |
 | Pattern commands | | |
 | | Portamento | Not implemented |
 | | Toneportamento | Not implemented |
@@ -48,6 +51,18 @@ Feature status:
 | | Set master volumne | Not implemented |
 | | Funktempo | Not implemented |
 | | Set tempo | Works |
+| Wavetable commands | | |
+| | Delay | Works |
+| | Waveform values | Works |
+| | Execute command | Not implemented |
+| | Relative notes | Works |
+| | Negative relative notes | Maybe - needs testing |
+| | Unchanged notes | Works |
+| | Absolute notes | Works |
+| Pulsetable commands | | |
+| | Modulation steps (positive) | Works |
+| | Modulation steps (negative) | Maybe - needs to be tested |
+| | Jump | Works |
 | Instrument features | | |
 | | ASDR | Works |
 | | Wavetable support | Partial |

@@ -32,22 +32,35 @@ ATmega output works for both PWM output on a single pin or to the [Adafruit Wave
 
 Feature status:
 
-| Feature      | Status  |
-| ------------- | ----- |
-| Sawtooth Wave | Works |
-| Triangle Waveform | Works |
-| Pulse Waveform | Works |
-| Variable pulse width | Works |
-| ADSR envelope | Works |
-| Pulsetable support | Works |
-| Wavetable support | Partial |
-| Portamento | Not implemented |
-| Toneportamento | Not implemented |
-| Vibrato | Not implemented |
-| Alter ADSR from pattern data | Not implemented |
-| Filter | Not implemented |
-| Set master volumne | Not implemented |
-| Funktempo | Not implemented |
-| Set tempo | Not implemented |
-
+| Group | Feature      | Status |
+| ----- | ------------ | ------ |
+| General Features | | |
+| | Sawtooth Wave | Works |
+| | Triangle Waveform | Works |
+| | Pulse Waveform | Works |
+| | Variable pulse width | Works |
+| Pattern commands | | |
+| | Portamento | Not implemented |
+| | Toneportamento | Not implemented |
+| | Vibrato | Not implemented |
+| | Alter ADSR from pattern data | Not implemented |
+| | Filter | Not implemented |
+| | Set master volumne | Not implemented |
+| | Funktempo | Not implemented |
+| | Set tempo | Works |
+| Instrument features | | |
+| | ASDR | Works |
+| | Wavetable support | Partial |
+| | Pulsetable support | Works |
+| | Filtertable support | Not implemented |
+| | Vibrato | Not implemented |
+| | Gateoff timer | Not implemented |
+| | Hard reset | Not implemented |
+| Orderlist | | |
+| | Pattern number | Works |
+| | Repeat pattern | Not implemented |
+| | Transpose pattern | Not implemented |
+| | End/jump | Partial |
+| Song features | | |
+| | Subtunes | Partial |
 

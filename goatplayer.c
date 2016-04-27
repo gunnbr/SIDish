@@ -476,10 +476,12 @@ int GoatPlayerTick()
         
         if (leftSide >= 0x01 && leftSide <= 0x0F)
         {
+            // Handle delay
             gTrackData[channel].wavetableDelay = leftSide;
         }
         else if (leftSide >= 0x10 && leftSide <= 0xDF)
         {
+            // Handle waveform value
             channels[channel].control = leftSide;
             
             // TODO: Find a way to combine waveforms.
@@ -488,19 +490,23 @@ int GoatPlayerTick()
             {
                 if (rightSide <= 0x5F)
                 {
+                    // Relative notes
                     gTrackData[channel].currentNote = gTrackData[channel].originalNote + rightSide;
                 }
                 else if (rightSide <= 0x7F)
                 {
+                    // Negative relative notes
                     // TODO: Verify this algorithm is correct
                     gTrackData[channel].currentNote = gTrackData[channel].originalNote - (rightSide - 0x60);
                 }
                 else if (rightSide == 0x80)
                 {
+                    // Note unchanged
                     gTrackData[channel].currentNote = gTrackData[channel].originalNote;
                 }
                 else if (rightSide <= 0xDF)
                 {
+                    // Absolute notes
                     gTrackData[channel].currentNote = rightSide - 0x81;
                 }
 

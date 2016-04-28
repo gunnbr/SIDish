@@ -73,7 +73,7 @@ Feature status:
 | | Hard reset | Not implemented |
 | Orderlist | | |
 | | Pattern number | Works |
-| | Repeat pattern | Not implemented |
+| | Repeat pattern | Works |
 | | Transpose pattern | Not implemented |
 | | End/jump | Partial |
 | Song features | | |

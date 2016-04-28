@@ -77,5 +77,5 @@ Feature status:
 | | Transpose pattern | Not implemented |
 | | End/jump | Partial |
 | Song features | | |
-| | Subtunes | Partial |
+| | Subtunes | Just barely (only enough to not break when encountered) |
 

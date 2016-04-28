@@ -137,6 +137,8 @@ struct Track
     // The position in the orderlist
     uint8_t orderlistPosition;
 
+    // Number of semitones to offset each note
+    int8_t semitoneOffset;
 } gTrackData[3];
         
 #if TEST_MODE
@@ -343,6 +345,7 @@ void InitializeSong(const char *songdata)
         gTrackData[channel].orderlistPosition = 0;
         gTrackData[channel].instrumentNumber = -1;
         gTrackData[channel].wavetablePosition = 0xFF;
+        gTrackData[channel].semitoneOffset = 0;
         
         uint8_t patternNumber;
         do
@@ -361,8 +364,17 @@ void InitializeSong(const char *songdata)
             }
             else if (patternNumber >= 0xE0 && patternNumber <= 0xFE)
             {
+                // Handle transpose codes
                 gTrackData[channel].orderlistPosition++;
-                // TODO: Handle transpose codes!
+                
+                // Convert 0xE0 (224) through 0xFE (254) to -15 through 15
+                gTrackData[channel].semitoneOffset = patternNumber - 0xF0;
+
+                print("Transpose channel ");
+                print8int(channel);
+                print(" ");
+                print8int(gTrackData[channel].semitoneOffset);
+                print("\n");
             }
         } while (patternNumber >= 0xD0);
         
@@ -709,9 +721,12 @@ int GoatPlayerTick()
             
             if (note >= 0x60 && note <= 0xBC)
             {
-                
                 // In testing, I have to subtract 0x68 to get the key I expect
                 note -= 0x68;
+                
+                // Transpose for the current orderlist setting
+                note += gTrackData[channel].semitoneOffset;
+                
                 KeyOn(channel, note, instrument);
 
                 // printf("NOTE ON -- Channel %u Note: %u Instrument: %u\n", channel, note, instrument);
@@ -731,7 +746,7 @@ int GoatPlayerTick()
                 }
                 
                 gTrackData[channel].orderlistPosition++;
-
+                
                 uint8_t patternNumber;
                 do
                 {
@@ -750,8 +765,17 @@ int GoatPlayerTick()
                     }
                     else if (patternNumber >= 0xE0 && patternNumber <= 0xFE)
                     {
+                        // Handle transpose codes!
                         gTrackData[channel].orderlistPosition++;
-                        // TODO: Handle transpose codes!
+                                   
+                        // Convert 0xE0 (224) through 0xFE (254) to -15 through 15
+                        gTrackData[channel].semitoneOffset = patternNumber - 0xF0;
+
+                        print("Transpose channel ");
+                        print8int(channel);
+                        print(" ");
+                        print8int(gTrackData[channel].semitoneOffset);
+                        print("\n");
                     }
                     else if (patternNumber == 0xFF)
                     {

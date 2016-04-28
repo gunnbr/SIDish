@@ -11,7 +11,7 @@ uint32_t totalTicks = 0;
 
 uint16_t vbiCount = VBI_COUNT;
 uint8_t songStepCountdown = 1;
-uint8_t gTempo = 4; // Default Goattracker tempo
+uint8_t gTempo = 5; // Default Goattracker tempo
 
 // Pointer to the start of each orderlist.
 // TODO: Deal with the subtunes in a better way
@@ -491,10 +491,20 @@ int GoatPlayerTick()
             // Handle delay
             gTrackData[channel].wavetableDelay = leftSide;
         }
-        else if (leftSide >= 0x10 && leftSide <= 0xDF)
+        else if (leftSide == 0 || (leftSide >= 0x10 && leftSide <= 0xDF))
         {
             // Handle waveform value
-            channels[channel].control = leftSide;
+            
+            if (leftSide == 0)
+            {
+                // If the left side is 0, process the right side
+                // according to the previous left side
+                leftSide = channels[channel].control; 
+            }
+            else
+            {
+                channels[channel].control = leftSide;
+            }
             
             // TODO: Find a way to combine waveforms.
             //       Or actually, do I really want to support this?
@@ -554,11 +564,6 @@ int GoatPlayerTick()
                 // it from 16.00 to 64.00
                 channels[channel].steps = pgm_read_word(&SAWTOOTH_TABLE[gTrackData[channel].currentNote]);
                 channels[channel].tableOffset = 0;
-                
-                // Until the pulsetable is implemented, just set the width to the halfway
-                // point (0x800), scaled to our table
-                // TODO: Remove this after the pulsetable is implemented
-                channels[channel].pulseWidth = 0x800 << 2;
             }
 
             // TODO: Move all the handline of what happens with the

@@ -41,7 +41,7 @@ Feature status:
 | | Variable pulse width | Works |
 | | Synchronize | Not implemented |
 | | Ring modulation | Not implemented |
-| | Multiple simultaneous waveforms per channel | Not implemented |
+| | Multiple simultaneous waveforms per channel | Not implemented and not likely to get implemented |
 | Pattern commands | | |
 | | Portamento | Not implemented |
 | | Toneportamento | Not implemented |
@@ -67,7 +67,7 @@ Feature status:
 | | ASDR | Works |
 | | Wavetable support | Partial |
 | | Pulsetable support | Works |
-| | Filtertable support | Not implemented |
+| | Filtertable support | Not implemented possibly never to be |
 | | Vibrato | Not implemented |
 | | Gateoff timer | Not implemented |
 | | Hard reset | Not implemented |

@@ -50,7 +50,8 @@ Feature status:
 | | Filter | Not implemented |
 | | Set master volumne | Not implemented |
 | | Funktempo | Not implemented |
-| | Set tempo | Works |
+| | Set global tempo | Works |
+| | Set channel tempo | Works |
 | | Non audio effects | Not implemented |
 | Wavetable commands | | |
 | | Delay | Works |

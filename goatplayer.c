@@ -8,10 +8,9 @@ uint8_t gNextOutputValue = 0;
 uint32_t totalTicks = 0;
 
 #define VBI_COUNT (BITRATE / 50)
+#define DEFAULT_TEMPO (5)
 
 uint16_t vbiCount = VBI_COUNT;
-uint8_t songStepCountdown = 1;
-uint8_t gTempo = 5; // Default Goattracker tempo
 
 // Pointer to the start of each orderlist.
 // TODO: Deal with the subtunes in a better way
@@ -139,6 +138,12 @@ struct Track
 
     // Number of semitones to offset each note
     int8_t semitoneOffset;
+    
+    // Tempo for this track
+    uint8_t tempo;
+    
+    // Countdown until the next step in the pattern data
+    uint8_t trackStepCountdown;
 } gTrackData[3];
         
 #if TEST_MODE
@@ -346,6 +351,8 @@ void InitializeSong(const char *songdata)
         gTrackData[channel].instrumentNumber = -1;
         gTrackData[channel].wavetablePosition = 0xFF;
         gTrackData[channel].semitoneOffset = 0;
+        gTrackData[channel].tempo = DEFAULT_TEMPO;
+        gTrackData[channel].trackStepCountdown = DEFAULT_TEMPO;
         
         uint8_t patternNumber;
         do
@@ -686,15 +693,6 @@ int GoatPlayerTick()
         gTrackData[channel].pulsetablePosition++;
     }
     
-    songStepCountdown--;
-    if (songStepCountdown > 0)
-    {
-        // TODO Process effects here
-        return songFinished;
-    }
-
-    songStepCountdown = gTempo;
-
     // Handle the pattern data
     for(uint8_t channel = 0; channel < 3 ; channel++)
     {
@@ -702,7 +700,15 @@ int GoatPlayerTick()
         uint8_t command;
         uint16_t data;
         uint8_t instrument;
+
+        gTrackData[channel].trackStepCountdown--;
+        if (gTrackData[channel].trackStepCountdown > 0)
+        {
+            continue;
+        }
         
+        gTrackData[channel].trackStepCountdown = gTrackData[channel].tempo;
+
         do
         {
             note = pgm_read_byte(gTrackData[channel].songPosition);
@@ -717,10 +723,27 @@ int GoatPlayerTick()
             switch (command)
             {
                 case 0x0F: // Set tempo
-                    gTempo = data;
-                    print("Set tempo: ");
-                    print8hex(data);
-                    print("\n");
+                    if (data >= 0x80)
+                    {
+                        print("Set tempo, channel ");
+                        print8int(channel);
+                        print(": 0x");
+                        print8hex(data - 0x80);
+                        print("\n");
+
+                        // Set the tempo for just this channel
+                        gTrackData[channel].tempo = data - 0x80;
+                    }
+                    else
+                    {
+                        print("Set global tempo: ");
+                        print8hex(data);
+                        print("\n");
+                        for (int i = 0 ; i < 3 ; i++)
+                        {
+                            gTrackData[i].tempo = data;
+                        }
+                    }
                     break;
             }
             
@@ -857,18 +880,18 @@ int OutputAudioAndCalculateNextByte(void)
             
             if (channels[channel].control & CONTROL_SAWTOOTH)
             {
-                //printf(" SAWTOOTH ");
                 waveformValue = offset - 32;
+                //printf(" SAWTOOTH (%u): %d\n", channel, waveformValue);
             }
             else if (channels[channel].control & CONTROL_TRIANGLE)
             {
-                //printf(" TRIANGLE ");
                 waveformValue = offset * 2;
                 if (waveformValue >= 64)
                 {
                     waveformValue = 128 - waveformValue;
                 }
                 waveformValue -= 32;
+                //printf(" TRIANGLE (%u): %d\n", channel, waveformValue);
             }
             else if (channels[channel].control & CONTROL_PULSE)
             {
@@ -880,11 +903,12 @@ int OutputAudioAndCalculateNextByte(void)
                 {
                     waveformValue = -32;
                 }
+                //printf(" PULSE (%u): %d\n", channel, waveformValue);
             }
             else if (channels[channel].control & CONTROL_NOISE)
             {
-                //print(" NOISE ");
                 waveformValue = (gNoise & 0x3F) - 32;
+                //printf(" NOISE (%u): %d\n", channel, waveformValue);
             }
             else
             {

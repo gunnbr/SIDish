@@ -51,6 +51,7 @@ Feature status:
 | | Set master volumne | Not implemented |
 | | Funktempo | Not implemented |
 | | Set tempo | Works |
+| | Non audio effects | Not implemented |
 | Wavetable commands | | |
 | | Delay | Works |
 | | Waveform values | Works |
@@ -59,6 +60,7 @@ Feature status:
 | | Negative relative notes | Maybe - needs testing |
 | | Unchanged notes | Works |
 | | Absolute notes | Works |
+| | Non audio effects | Not implemented |
 | Pulsetable commands | | |
 | | Modulation steps (positive) | Works |
 | | Modulation steps (negative) | Maybe - needs to be tested |

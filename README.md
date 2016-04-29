@@ -76,7 +76,7 @@ Feature status:
 | Orderlist | | |
 | | Pattern number | Works |
 | | Repeat pattern | Works |
-| | Transpose pattern | Not implemented |
+| | Transpose pattern | Works |
 | | End/jump | Partial |
 | Song features | | |
 | | Subtunes | Just barely (only enough to not break when encountered) |

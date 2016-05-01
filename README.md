@@ -37,7 +37,7 @@ Feature status:
 | Synthesizer Features | | |
 | | Sawtooth Wave | Works |
 | | Triangle Waveform | Works |
-| | Pulse Waveform | Partial (something is quite wrong with it) |
+| | Pulse Waveform | Mostly works though there are still some bugs with pulse width |
 | | Variable pulse width | Works |
 | | Synchronize | Not implemented |
 | | Ring modulation | Not implemented |

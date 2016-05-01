@@ -629,6 +629,7 @@ int GoatPlayerTick()
         {
             channels[channel].pulseWidth += gTrackData[channel].pulseChange; 
             gTrackData[channel].pulseRepeatCountdown--;
+            //printf("Channel %u changing pulse by %d to %u\n", channel, gTrackData[channel].pulseChange, channels[channel].pulseWidth);
             continue;
         }
         
@@ -656,7 +657,7 @@ int GoatPlayerTick()
         {
             if (rightSide == 0)
             {
-                //printf("Pulsetable end\n");
+                //print("Pulsetable end\n");
                 gTrackData[channel].pulsetablePosition = 0xFF;
             }
             else
@@ -675,6 +676,8 @@ int GoatPlayerTick()
         else if (leftSide < 0x80)
         {
             // Set pulse change parameters
+            //printf("Pulse change: 0x%02X %d\n", leftSide, (int8_t)rightSide);
+            
             gTrackData[channel].pulseRepeatCountdown = leftSide;
             gTrackData[channel].pulseChange = (int8_t) rightSide;
         }
@@ -848,6 +851,7 @@ int OutputAudioAndCalculateNextByte(void)
     OutputByte(gNextOutputValue);
 
     int8_t outputValue = 0;
+    int8_t wrap = 0;
     
     // 4 channels are actually supported, but since GoatTracker
     // only supports 3 and I need more cycles, only process 3
@@ -862,10 +866,6 @@ int OutputAudioAndCalculateNextByte(void)
         
         if (channels[channel].envelopePhase != Off)
         {
-            //printf("Channel %u Offset: 0x%04X + Steps: 0x%04X = ", channel, channels[channel].tableOffset, channels[channel].steps);
-            channels[channel].tableOffset += channels[channel].steps;
-            //printf("0x%04X ", channels[channel].tableOffset);
-
             uint16_t offset = channels[channel].tableOffset >> 8;
             //printf("Offset: 0x%04X ", offset);
             
@@ -874,6 +874,7 @@ int OutputAudioAndCalculateNextByte(void)
                 offset -= 64;
                 channels[channel].tableOffset &= 0xFF;
                 channels[channel].tableOffset |= offset << 8;
+                wrap = 1;
             }
 
             int8_t waveformValue;
@@ -895,15 +896,19 @@ int OutputAudioAndCalculateNextByte(void)
             }
             else if (channels[channel].control & CONTROL_PULSE)
             {
-                if (channels[channel].tableOffset < channels[channel].pulseWidth)
+                if (wrap)
                 {
                     waveformValue = 31;
                 }
-                else
+                else if (channels[channel].tableOffset >= channels[channel].pulseWidth)
                 {
                     waveformValue = -32;
                 }
-                //printf(" PULSE (%u): %d\n", channel, waveformValue);
+                else
+                {
+                    waveformValue = 31;
+                }
+                //printf(" PULSE (%u): offset: %u pulseWidth: %u %d\n", channel, channels[channel].tableOffset, channels[channel].pulseWidth, waveformValue);
             }
             else if (channels[channel].control & CONTROL_NOISE)
             {
@@ -920,6 +925,7 @@ int OutputAudioAndCalculateNextByte(void)
             //printf("waveform: %3d short: %3d fadeAmount: %2u phase: %d faded: %3d\n",
             //        waveformValue, shortWaveformValue, channels[channel].fadeAmount, channels[channel].envelopePhase, fadedValue);
             
+            //printf(" Faded: %d\n", fadedValue);
             outputValue += fadedValue;
 
             channels[channel].phaseStepCountdown--;
@@ -1004,10 +1010,15 @@ int OutputAudioAndCalculateNextByte(void)
                     break;
                 }
             }
+
+            //printf("Channel %u Offset: 0x%04X + Steps: 0x%04X = ", channel, channels[channel].tableOffset, channels[channel].steps);
+            channels[channel].tableOffset += channels[channel].steps;
+            //printf("0x%04X ", channels[channel].tableOffset);
         }
     }  
     
     // Scale -128 to 128 values to 0 to 255
+    //printf("Output: %d\n", outputValue);
     gNextOutputValue = (uint8_t)((int16_t)outputValue + 128);
     //printf("Next output 0x%02X\n", gNextOutputValue);
     

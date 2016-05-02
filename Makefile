@@ -49,7 +49,7 @@ LIBS  = -lm
 all: sidish.hex sidish.bin
 .PHONY: all program
 
-sidish.o: sidish.c goatplayer.c sidish.h Makefile
+sidish.o: sidish.c goatplayer.c sidish.h Makefile songdata.o
 	$(QUIET)$(CC) -c $(CFLAGS) -Wa,-adhlns=$(@:.o=.al) -o $@ $<
 
 sidish.elf: sidish.o songdata.o

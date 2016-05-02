@@ -56,10 +56,10 @@ LIBS  = -lm
 all: sidish.hex sidish.bin
 .PHONY: all program
 
-sidish.o: sidish.c goatplayer.c sidish.h Makefile songdata.o
+obj/sidish.o: sidish.c goatplayer.c sidish.h Makefile obj/songdata.o
 	$(QUIET)$(CC) -c $(CFLAGS) -Wa,-adhlns=$(@:.o=.al) -o $@ $<
 
-sidish.elf: sidish.o songdata.o
+sidish.elf: obj/sidish.o obj/songdata.o
 	@echo Linking $<
 	$(QUIET)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
@@ -77,9 +77,9 @@ goattest: goattest.c goatplayer.c sidish.h $(SONG)
 program: $(PROGRAM).hex
 	$(UPLOADER) $(UPLOADER_FLAGS) -U flash:w:$(PROGRAM).hex
 
-songdata.o: $(SONG)
+obj/songdata.o: $(SONG)
 	@echo "Creating binary song data"
 	avr-objcopy --rename-section .data=.progmem.data,contents,alloc,load,readonly,data --redefine-sym _binary_$(SONGNAME)_start=song_start --redefine-sym _binary_$(SONGNAME)_end=song_end --redefine-sym _binary_$(SONGNAME)_size=song_size_sym -I binary -O elf32-avr $< $@
 
 clean:
-	rm -rf *.hex *.al *.bin *.elf *.i *.o *.s *~
+	rm -rf *.hex *.al *.bin *.elf obj/* *~

@@ -1,4 +1,11 @@
 SONG = Comic_Bakery.sng
+#SONG = testsongs/EnvelopeTest.sng
+#SONG = testsongs/SquareTest.sng
+#SONG = testsongs/PulseTest.sng
+#SONG = testsongs/DrumTest.sng
+#SONG = testsongs/ArpeggioTest.sng
+#SONG = testsongs/WavetableTest.sng
+#SONG = testsongs/DojoPulseTest.sng
 
 MCU_TARGET = atmega328p
 F_CPU = 16000000L
@@ -63,8 +70,8 @@ sidish.bin: sidish.elf
 	$(QUIET)$(OBJCOPY) -j .text -j .data -O binary $< $@
 	@echo Build complete. $@ is `stat -f '%z' $@` bytes.
 
-goattest: goattest.c goatplayer.c sidish.h
-	gcc -o $@ $<
+goattest: goattest.c goatplayer.c sidish.h $(SONG)
+	gcc -DSONG=\"$(SONG)\" -o $@ $<
 	./$@
 
 program: $(PROGRAM).hex

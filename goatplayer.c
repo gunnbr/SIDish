@@ -149,12 +149,12 @@ struct Track
 #if TEST_MODE
 struct Instrument FakeInstruments[1] =
 {
-    {0x00, 0xF0, 0, 0, 0, 0, 0, 0, 0, "TestInstrument"}
+    {0x00, 0xF0, 1, 0, 0, 0, 0, 0, 0, "TestInstrument"}
 };
     
 void EnableFakeInstruments()
 {
-    instruments = FakeInstruments;
+    gInstruments = FakeInstruments;
 }
 #endif
 

@@ -332,6 +332,8 @@ int main (void)
                 {
                     key++;
                     KeyOn(0, key, 4);
+                    channels[0].fadeAmount = 0;
+                    channels[0].envelopePhase = Attack;
                 }
             }
             else if (command == 31 || command == 'j')
@@ -341,6 +343,8 @@ int main (void)
                 {
                     key--;
                     KeyOn(0, key, 4);
+                    channels[0].fadeAmount = 0;
+                    channels[0].envelopePhase = Attack;
                 }
             }
             else if (command == '\n')

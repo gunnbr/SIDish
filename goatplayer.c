@@ -927,7 +927,6 @@ int OutputAudioAndCalculateNextByte(void)
             
             //printf(" Faded: %d\n", fadedValue);
             outputValue += fadedValue;
-
             channels[channel].phaseStepCountdown--;
             if (channels[channel].phaseStepCountdown == 0)
             {
@@ -936,8 +935,7 @@ int OutputAudioAndCalculateNextByte(void)
                 switch (channels[channel].envelopePhase)
                 {
                 case Attack:
-                    channels[channel].fadeAmount--;
-                    if (channels[channel].fadeAmount == 0)
+                    if (channels[channel].fadeAmount <= 0)
                     {
                         //printf("Done attacking. SR = 0x%02X\n", channels[channel].sustainRelease);
                         uint8_t sustainLevel = (channels[channel].sustainRelease & 0xF0) >> 4;
@@ -963,6 +961,7 @@ int OutputAudioAndCalculateNextByte(void)
                     }
                     else
                     {
+                        channels[channel].fadeAmount--;
                         channels[channel].phaseStepCountdown = AttackCycles[(channels[channel].attackDecay & 0xF0) >> 4];
                     }
                     break;
@@ -973,16 +972,16 @@ int OutputAudioAndCalculateNextByte(void)
                         sustainFadeValue <<= 1;
                         
                         // Decaying from the maximum value to the sustain level
-                        // TODO: Problem here when Sustain is F
                     
-                        channels[channel].fadeAmount++;
                         if (channels[channel].fadeAmount >= sustainFadeValue)
                         {
                             channels[channel].envelopePhase = Sustain;
-                            // TODO: Really should just disable the phaseCountdown here, but maybe it doesn't matter
+                            // TODO: Really should just disable the phaseCountdown here, but it doesn't entirely
+                            //       matter since it just wraps around only calling Sustain every 65536 loops.
                         }
                         else
                         {
+                            channels[channel].fadeAmount++;
                             channels[channel].phaseStepCountdown = DecayReleaseCycles[channels[channel].attackDecay & 0x0F];
                         }
                     }

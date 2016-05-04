@@ -98,7 +98,20 @@ struct Instrument
     uint8_t gateoffTime;     // +7      byte    Gateoff timer
     uint8_t hardRestart;     // +8      byte    Hard restart/1st frame waveform
     char    name[16];        // +9      16      Instrument name
-} *gInstruments;
+} const *gInstruments;
+
+#if TEST_MODE
+const struct Instrument FakeInstruments[] PROGMEM =
+{
+    {0x00, 0xF0, 0, 0, 0, 0, 0, 0, 0, "TestInstrument"},
+    {0x56, 0x78, 0, 0, 0, 0, 0, 0, 0, "TI2"},
+};
+    
+void EnableFakeInstruments()
+{
+    gInstruments = FakeInstruments;
+}
+#endif
 
 uint8_t *gWavetable, *gPulsetable, *gFiltertable, *gSpeedtable;
 uint8_t gWavetableSize, gPulsetableSize, gFiltertableSize, gSpeedtableSize;
@@ -146,18 +159,6 @@ struct Track
     uint8_t trackStepCountdown;
 } gTrackData[3];
         
-#if TEST_MODE
-struct Instrument FakeInstruments[1] =
-{
-    {0x00, 0xF0, 1, 0, 0, 0, 0, 0, 0, "TestInstrument"}
-};
-    
-void EnableFakeInstruments()
-{
-    gInstruments = FakeInstruments;
-}
-#endif
-
 // Start of the song data -- only needed for testing 
 // by printing the offsets
 const char *gSongData;
@@ -425,6 +426,10 @@ void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
     gTrackData[channel].pulsetablePosition--;
     
 #if 0
+    print(" AD: ");
+    print8hex(channels[channel].attackDecay);
+    print(" SR: ");
+    print8hex(channels[channel].sustainRelease);
     print(" WavetablePos: ");
     print8int(gTrackData[channel].wavetablePosition);
     print(" PulsetablePos: ");
@@ -927,6 +932,7 @@ int OutputAudioAndCalculateNextByte(void)
             
             //printf(" Faded: %d\n", fadedValue);
             outputValue += fadedValue;
+            
             channels[channel].phaseStepCountdown--;
             if (channels[channel].phaseStepCountdown == 0)
             {
@@ -970,6 +976,13 @@ int OutputAudioAndCalculateNextByte(void)
                     {
                         uint8_t sustainFadeValue = 0x0F - ((channels[channel].sustainRelease & 0xF0) >> 4);
                         sustainFadeValue <<= 1;
+#if 0
+                        print("SR: ");
+                        print8hex(channels[channel].sustainRelease);
+                        print(" sFV: ");
+                        print8hex(sustainFadeValue);
+                        print("\n");
+#endif
                         
                         // Decaying from the maximum value to the sustain level
                     

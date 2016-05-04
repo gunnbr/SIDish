@@ -219,9 +219,10 @@ void setup()
     OCR0A = 124;
     TIMSK0 = _BV(OCIE0A); // Enable interrupt
 
-    // Setup serial 9600 bps
+    // Setup serial speed
     UBRR0H = 0;
-    UBRR0L = 103;
+    //UBRR0L = 103; // 9600 bps
+    UBRR0L = 25; // 38400 bps
 
     // Enable the transmitter and receiver
     UCSR0B = (1<<RXEN0)|(1<<TXEN0);
@@ -310,6 +311,18 @@ ISR(TIMER0_COMPA_vect)
     OutputAudioAndCalculateNextByte();
 }
 
+#if TEST_MODE
+void StartNote(uint8_t key)
+{
+    KeyOn(0, key, 1);
+    channels[0].envelopePhase = Attack;
+    channels[0].fadeAmount = 32;
+    channels[0].control = CONTROL_TRIANGLE | CONTROL_GATE;
+    channels[0].steps = pgm_read_word(&SAWTOOTH_TABLE[key]);
+    channels[0].tableOffset = 0;
+}
+#endif
+
 int main (void)
 {
     setup();
@@ -317,7 +330,7 @@ int main (void)
 #if TEST_MODE
     uint8_t key = 40;
 
-    KeyOn(0, key, 4);
+    StartNote(key);
 
     while (1)
     {
@@ -331,9 +344,7 @@ int main (void)
                 if (key < 83)
                 {
                     key++;
-                    KeyOn(0, key, 4);
-                    channels[0].fadeAmount = 0;
-                    channels[0].envelopePhase = Attack;
+                    StartNote(key);
                 }
             }
             else if (command == 31 || command == 'j')
@@ -342,9 +353,7 @@ int main (void)
                 if (key > 0)
                 {
                     key--;
-                    KeyOn(0, key, 4);
-                    channels[0].fadeAmount = 0;
-                    channels[0].envelopePhase = Attack;
+                    StartNote(key);
                 }
             }
             else if (command == '\n')

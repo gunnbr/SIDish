@@ -230,7 +230,9 @@ void setup()
     // Serup serial for 8N1
     UCSR0C = 6; 
 
+#if !TEST_MODE
     InitializeSong(song_start);
+#endif
     
     sei();
 }
@@ -328,7 +330,11 @@ int main (void)
     setup();
 
 #if TEST_MODE
+    EnableFakeInstruments();
+    
     uint8_t key = 40;
+
+    print("\n\nSIDish running in TEST_MODE\n");
 
     StartNote(key);
 

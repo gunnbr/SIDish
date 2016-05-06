@@ -91,17 +91,6 @@ void InitializeTables()
     printf("};\n");
 }
 
-//#define SONGNAME "Comic_Bakery.sng"
-//#define SONGNAME "testsongs/EnvelopeTest.sng"
-//#define SONGNAME "testsongs/SquareTest.sng"
-//#define SONGNAME "testsongs/PulseTest.sng"
-//#define SONGNAME "testsongs/DrumTest.sng"
-//#define SONGNAME "testsongs/ArpeggioTest.sng"
-//#define SONGNAME "testsongs/WavetableTest.sng"
-#define SONGNAME "dojo-modified.sng"
-//#define SONGNAME "consultant.sng"
-//#define SONGNAME "testsongs/DojoPulseTest.sng"
-
 int main(void)
 {
     InitializeTables();

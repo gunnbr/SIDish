@@ -58,6 +58,7 @@ all: sidish.hex sidish.bin
 
 obj/sidish.o: sidish.c goatplayer.c sidish.h Makefile obj/songdata.o
 	$(QUIET)$(CC) -c $(CFLAGS) -Wa,-adhlns=$(@:.o=.al) -o $@ $<
+	$(QUIET)avr-size $@
 
 sidish.elf: obj/sidish.o obj/songdata.o
 	@echo Linking $<

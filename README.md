@@ -27,8 +27,11 @@ I don't think there's anything wrong with the Miduino at all, I just wanted to s
 
 ## Status
 The current status is that basic support for playing goattracker files works. Not everything is implemented or works
-correctly, but songs are okay to recognizable. It can be compiled both to write out .wav files on the host system or play in realtime on an ATmega.
-ATmega output works for both PWM output on a single pin or to the [Adafruit Wave Shield](https://www.adafruit.com/product/94). It happens to have a 10 bit DAC and a headphone jack which is exactly what I needed to experiment on the couch without bothering anyone else, so that's what I've been using.
+correctly, but songs are okay to recognizable. It can be compiled both to write out .wav files on the host system or
+play in realtime on an ATmega.
+ATmega output works for both PWM output on a single pin or to the [Adafruit Wave Shield](https://www.adafruit.com/product/94). 
+It happens to have a 10 bit DAC and a headphone jack which is exactly what I needed to experiment on the couch without bothering anyone else, 
+so that's what I've been using.
 
 Feature status:
 
@@ -37,7 +40,7 @@ Feature status:
 | Synthesizer Features | | |
 | | Sawtooth Wave | Works |
 | | Triangle Waveform | Works |
-| | Pulse Waveform | Mostly works though there are still some bugs with pulse width |
+| | Pulse Waveform | Mostly works though there are still some bugs with pulse width and very big and small pulse widths|
 | | Variable pulse width | Works |
 | | Synchronize | Not implemented |
 | | Ring modulation | Not implemented |

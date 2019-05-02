@@ -22,7 +22,7 @@ Since I grew up with the Commodore 64, I've always loved the kind of music it ge
 * Only pulse waves are supported
 * No percussion sounds are available
 * Only 3 voices are supported
-* All 3 timers of the 328 are used, which no possibility of using htem for anything else
+* All 3 timers of the 328 are used, which no possibility of using them for anything else
 I don't think there's anything wrong with the Miduino at all, I just wanted to see if I could do any better.
 
 ## Status

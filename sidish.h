@@ -19,18 +19,39 @@
 #define NUM_PIANO_KEYS (87)
 
 // Outputs the next byte of audio data
+#if __cplusplus 
+extern "C" 
+#endif
 void OutputByte(uint8_t value);
 
 // Outputs the previously calculated byte of audio and calculate
 // the next byte
 // Returns True if the song is finished, false otherwise
+#if __cplusplus 
+extern "C"
+#endif
 int OutputAudioAndCalculateNextByte();
 
-void InitializeSong(const char *);
+#if __cplusplus 
+extern "C"
+#endif
+int InitializeSong(const char *);
 
+#if __cplusplus 
+extern "C"
+#endif
 void print(char *message);
+#if __cplusplus 
+extern "C"
+#endif
 void print8int(int8_t);
+#if __cplusplus 
+extern "C"
+#endif
 void print8hex(uint8_t);
+#if __cplusplus 
+extern "C"
+#endif
 void printint(int);
 
 #endif // __SIDISH_H

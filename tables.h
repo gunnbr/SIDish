@@ -1,5 +1,9 @@
 // This file is only included in the AVR build
+#ifdef WIN32
+#define PROGMEM
+#else
 #include <avr/pgmspace.h>
+#endif
 
 // Based on 16 kHz bitrate and 1024 table size
 const uint32_t FREQUENCY_TABLE[] PROGMEM = {

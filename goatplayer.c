@@ -3,6 +3,16 @@
 // Both combined in this file to allow optimization for embedded
 // hardware by using global variables
 
+#ifdef WIN32
+#include <stdint.h>
+#include "tables.h"
+#include "sidish.h"
+
+uint32_t pgm_read_dword(const char *);
+uint16_t pgm_read_word(const uint32_t *);
+uint8_t pgm_read_byte(const char *);
+#endif
+
 uint8_t gNextOutputValue = 0;
 
 uint32_t totalTicks = 0;
@@ -163,7 +173,7 @@ struct Track
 // by printing the offsets
 const char *gSongData;
 
-void InitializeSong(const char *songdata)
+int InitializeSong(const char *songdata)
 {
     const char *data = songdata;
     gSongData = songdata;
@@ -174,7 +184,7 @@ void InitializeSong(const char *songdata)
     if (header != 0x35535447)
     {
         print("Header is not from GoatTracker\n");
-        return;
+        return 0;
     }
     data += 4;
     
@@ -394,6 +404,8 @@ void InitializeSong(const char *songdata)
         print8int(patternNumber);
         print("\n");
     }
+
+	return 1;
 }
 
 void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
@@ -745,11 +757,11 @@ int GoatPlayerTick()
                     else
                     {
                         print("Set global tempo: ");
-                        print8hex(data);
+                        print8hex((uint8_t)data);
                         print("\n");
                         for (int i = 0 ; i < 3 ; i++)
                         {
-                            gTrackData[i].tempo = data;
+                            gTrackData[i].tempo = (uint8_t)data;
                         }
                     }
                     break;

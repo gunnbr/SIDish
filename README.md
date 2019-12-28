@@ -1,5 +1,5 @@
 # SIDish
-SID chip type synthesizer for Arduino
+SID chip type synthesizer for Arduino and Windows
 
 ## Goal
 The goal for this project is to make a synthesizer that can run on an Arduino Uno

@@ -19,12 +19,12 @@ extern "C" void print(char *message)
 
 extern "C" void print8int(int8_t num)
 {
-	cout << std::dec << num;
+	cout << std::dec << (int)num;
 }
 
 extern "C" void print8hex(uint8_t num)
 {
-	cout << std::hex << num;
+	cout << std::hex << (int)num;
 }
 
 extern "C" void printint(int num)
@@ -111,6 +111,13 @@ void FillBuffer(char *buffer)
 
 int main()
 {
+	cout << "This is a hex number: 0x";
+	print8hex(100);
+	cout << "\nAnd here is another: 0x";
+	uint8_t num = 100;
+	print8hex(num);
+	cout << "\n";
+
 	cout << "Initializing buffers\n";
 
 	gAudioBuffers[0] = (LPSTR)LocalAlloc(LMEM_FIXED, BUFFER_SIZE);

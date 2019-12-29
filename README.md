@@ -89,4 +89,3 @@ Feature status:
 ## To Do
 * Split out the synthesizer from the player. I'm not sure why I combined them so much other than the comment in the code about allowing better optimization. Seems like a weak argument to me now.
 * Fix Windows support to cleanly exit
-* Fix Windows support for printing numbers in hexadecimal

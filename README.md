@@ -1,5 +1,5 @@
 # SIDish
-SID chip type synthesizer for Arduino and Windows
+SID chip type synthesizer for Arduino
 
 ## Goal
 The goal for this project is to make a synthesizer that can run on an Arduino Uno
@@ -16,6 +16,7 @@ Stretch goals:
 * Oscillator sync
 * Support for filtering
 * Extra channels that can sync external hardware effects with music
+* Work on desktop systems for faster debugging
 
 ## History
 Since I grew up with the Commodore 64, I've always loved the kind of music it generated and have been fascinated with synthesizers in general. In the last few years, I've been playing with the Arduino and related processors and recently came across the [Miduino](http://emotiscope.co/miduino/). I like the idea of the producing music with an Arduino, but don't like the limitations of that project, specifically that:
@@ -85,3 +86,7 @@ Feature status:
 | Song features | | |
 | | Subtunes | Just barely (only enough to not break when encountered) |
 
+## To Do
+* Split out the synthesizer from the player. I'm not sure why I combined them so much other than the comment in the code about allowing better optimization. Seems like a weak argument to me now.
+* Fix Windows support to cleanly exit
+* Fix Windows support for printing numbers in hexadecimal

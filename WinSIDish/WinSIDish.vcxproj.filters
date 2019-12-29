@@ -52,6 +52,7 @@
     <None Include="id_songd.bin">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="..\README.md" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="WinSIDish.rc">

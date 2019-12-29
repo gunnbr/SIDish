@@ -10,25 +10,26 @@
 LPSTR gAudioBuffers[2];
 int gNextBuffer = 0;
 
+using namespace std;
 
 extern "C" void print(char *message)
 {
-	std::cout << message;
+	cout << message;
 }
 
 extern "C" void print8int(int8_t num)
 {
-	std::cout << std::dec << num;
+	cout << std::dec << num;
 }
 
 extern "C" void print8hex(uint8_t num)
 {
-	std::cout << std::hex << num;
+	cout << std::hex << num;
 }
 
 extern "C" void printint(int num)
 {
-	std::cout << std::dec << num;
+	cout << std::dec << num;
 }
 
 extern "C" uint32_t pgm_read_dword(const char *data)
@@ -50,31 +51,31 @@ void PrintResult(MMRESULT result)
 {
 	switch (result) {
 	case MMSYSERR_INVALHANDLE:
-		std::cout << "Invalid handle\n";
+		cout << "Invalid handle\n";
 		break;
 
 	case MMSYSERR_NODRIVER:
-		std::cout << "No driver\n";
+		cout << "No driver\n";
 		break;
 
 	case MMSYSERR_NOMEM:
-		std::cout << "No memory\n";
+		cout << "No memory\n";
 		break;
 
 	case WAVERR_UNPREPARED:
-		std::cout << "Unprepared\n";
+		cout << "Unprepared\n";
 		break;
 
 	case MMSYSERR_INVALPARAM:
-		std::cout << "Invalid parameter\n";
+		cout << "Invalid parameter\n";
 		break;
 
 	case MMSYSERR_HANDLEBUSY:
-		std::cout << "Handle is busy (on another thread)\n";
+		cout << "Handle is busy (on another thread)\n";
 		break;
 
 	default:
-		std::cout << "Other: " << result << "\n";
+		cout << "Other: " << result << "\n";
 		break;
 	}
 }
@@ -110,18 +111,18 @@ void FillBuffer(char *buffer)
 
 int main()
 {
-	std::cout << "Initializing buffers\n";
+	cout << "Initializing buffers\n";
 
 	gAudioBuffers[0] = (LPSTR)LocalAlloc(LMEM_FIXED, BUFFER_SIZE);
 	gAudioBuffers[1] = (LPSTR)LocalAlloc(LMEM_FIXED, BUFFER_SIZE);
 
 	UINT numDevices = waveOutGetNumDevs();
 
-	std::cout << "Opening device first device of " << numDevices << "\n";
+	cout << "Opening device first device of " << numDevices << "\n";
 
 	if (numDevices == 0)
 	{
-		std::cout << "No devices to open\n";
+		cout << "No devices to open\n";
 		return -1;
 	}
 
@@ -135,7 +136,7 @@ int main()
 
 	if (result != MMSYSERR_NOERROR)
 	{
-		std::cout << "Failed to open device: " << result << "\n";
+		cout << "Failed to open device: " << result << "\n";
 		return -1;
 	}
 	else
@@ -143,7 +144,7 @@ int main()
 		std::wcout << "Audio driver is open. Device is 0x" << std::hex << audioDevice << std::dec << "\n";
 	}
 
-	std::cout << "Preparing the headers\n";
+	cout << "Preparing the headers\n";
 
 	WAVEHDR headers[2];
 
@@ -151,7 +152,7 @@ int main()
 	result = waveOutPrepareHeader(audioDevice, &headers[0], sizeof(WAVEHDR));
 	if (result != MMSYSERR_NOERROR)
 	{
-		std::cout << "Failed to prepare header 0: ";
+		cout << "Failed to prepare header 0: ";
 		PrintResult(result);
 		return -1;
 	}
@@ -160,12 +161,18 @@ int main()
 	result = waveOutPrepareHeader(audioDevice, &headers[1], sizeof(WAVEHDR));
 	if (result != MMSYSERR_NOERROR)
 	{
-		std::cout << "Failed to prepare header 1: ";
+		cout << "Failed to prepare header 1: ";
 		PrintResult(result);
 		return -1;
 	}
 
 	HRSRC hSongResource = FindResource(NULL, MAKEINTRESOURCE(IDR_RCDATA1), RT_RCDATA);
+	if (!hSongResource) 
+	{
+		cout << "Failed to load song resource\n";
+		return -1;
+	}
+
 	const char *pSongData = (const char *)LoadResource(NULL, hSongResource);
 	int success = InitializeSong(pSongData);
 	if (!success) 
@@ -176,26 +183,26 @@ int main()
 	FillBuffer(gAudioBuffers[0]);
 	FillBuffer(gAudioBuffers[1]);
 
-	std::cout << "Filling the buffers\n";
+	cout << "Filling the buffers\n";
 	ResetEvent(audioEvent);
 
 	result = waveOutWrite(audioDevice, &headers[0], sizeof(WAVEHDR));
-	if (result = MMSYSERR_NOERROR)
+	if (result != MMSYSERR_NOERROR)
 	{
-		std::cout << "Failed to write buffer 0";
+		cout << "Failed to write buffer 0";
 		PrintResult(result);
 		return -1;
 	}
 
 	result = waveOutWrite(audioDevice, &headers[1], sizeof(WAVEHDR));
-	if (result = MMSYSERR_NOERROR)
+	if (result != MMSYSERR_NOERROR)
 	{
-		std::cout << "Failed to write buffer 1";
+		cout << "Failed to write buffer 1";
 		PrintResult(result);
 		return -1;
 	}
 
-	std::cout << "Sleeping for a while...\n";
+	cout << "Sleeping for a while...\n";
 
 	bool bDone = false;
 	UINT8 currentBuffer = 0;
@@ -205,14 +212,14 @@ int main()
 		DWORD dwResult = WaitForSingleObject(audioEvent, 20000);
 		if (dwResult == WAIT_OBJECT_0)
 		{
-			//std::cout << "Event triggered!\n";
+			//cout << "Event triggered!\n";
 			if (headers[gNextBuffer].dwFlags & WHDR_DONE) {
-				//std::cout << "    Refilling buffer #" << gNextBuffer;
+				//cout << "    Refilling buffer #" << gNextBuffer;
 				FillBuffer(gAudioBuffers[gNextBuffer]);
 				result = waveOutWrite(audioDevice, &headers[gNextBuffer], sizeof(WAVEHDR));
-				if (result = MMSYSERR_NOERROR)
+				if (result != MMSYSERR_NOERROR)
 				{
-					std::cout << "Failed to write buffer " << gNextBuffer;
+					cout << "Failed to write buffer " << gNextBuffer;
 					PrintResult(result);
 					return -1;
 				}
@@ -222,22 +229,22 @@ int main()
 			}
 			else 
 			{
-				std::cout << "Event triggered--flags are 0x" << std::hex << headers[gNextBuffer].dwFlags << std::dec;
+				cout << "Event triggered--flags are 0x" << std::hex << headers[gNextBuffer].dwFlags << std::dec;
 			}
 		}
 		else if (dwResult == WAIT_ABANDONED) 
 		{
-			std::cout << "Wait abandoned\n";
+			cout << "Wait abandoned\n";
 			bDone = true;
 		}
 		else if (dwResult == WAIT_TIMEOUT) 
 		{
-			std::cout << "Timeout waiting for buffer\n";
+			cout << "Timeout waiting for buffer\n";
 			bDone = true;
 		}
 		else if (dwResult == WAIT_FAILED) 
 		{
-			std::cout << "Wait failed. Error: 0x" << std::hex << GetLastError() << std::dec << "\n";
+			cout << "Wait failed. Error: 0x" << std::hex << GetLastError() << std::dec << "\n";
 			bDone = true;
 		}
 		ResetEvent(audioEvent);
@@ -246,5 +253,5 @@ int main()
 	waveOutUnprepareHeader(audioDevice, &headers[0], 0);
 	waveOutUnprepareHeader(audioDevice, &headers[1], 0);
 
-	std::cout << "Exiting\n";
+	cout << "Exiting\n";
 }

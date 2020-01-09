@@ -19,7 +19,10 @@ Stretch goals:
 * Work on desktop systems for faster debugging
 
 ## History
-Since I grew up with the Commodore 64, I've always loved the kind of music it generated and have been fascinated with synthesizers in general. In the last few years, I've been playing with the Arduino and related processors and recently came across the [Miduino](http://emotiscope.co/miduino/). I like the idea of the producing music with an Arduino, but don't like the limitations of that project, specifically that:
+Since I grew up with the Commodore 64, I've always loved the kind of music it generated and have been fascinated with synthesizers in general.
+In the last few years, I've been playing with the Arduino and related processors and recently came across
+the [Miduino](http://emotiscope.co/miduino/). I like the idea of the producing music with an Arduino, but don't like
+the limitations of that project, specifically that:
 * Only pulse waves are supported
 * No percussion sounds are available
 * Only 3 voices are supported
@@ -27,6 +30,8 @@ Since I grew up with the Commodore 64, I've always loved the kind of music it ge
 I don't think there's anything wrong with the Miduino at all, I just wanted to see if I could do any better.
 
 ## Status
+This is currently undergoing refactoring to split out the synthesizer from the goattracker playback and is probably broken for Arduino.
+
 The current status is that basic support for playing goattracker files works. Not everything is implemented or works
 correctly, but songs are okay to recognizable. It can be compiled both to write out .wav files on the host system or
 play in realtime on an ATmega.

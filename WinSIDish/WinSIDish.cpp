@@ -107,16 +107,35 @@ void FillBuffer(char *buffer)
 	{
 		OutputAudioAndCalculateNextByte();
 	}
+
+	for (int i = 0; i < 24; i++) {
+		printf("%02X ", buffer[i] & 0xFF);
+	}
+	printf("\n");
+}
+
+
+bool gStillPlaying = true;
+
+BOOL WINAPI consoleHandler(DWORD signal) 
+{
+	if (signal == CTRL_C_EVENT)
+	{
+		printf("Ctrl-C handled\n"); // do cleanup
+		gStillPlaying = false;
+		return TRUE;
+	}
+
+	return FALSE;
 }
 
 int main()
 {
-	cout << "This is a hex number: 0x";
-	print8hex(100);
-	cout << "\nAnd here is another: 0x";
-	uint8_t num = 100;
-	print8hex(num);
-	cout << "\n";
+	if (!SetConsoleCtrlHandler(consoleHandler, TRUE)) 
+	{
+		printf("\nERROR: Could not set control handler");
+		return 1;
+	}
 
 	cout << "Initializing buffers\n";
 
@@ -211,50 +230,56 @@ int main()
 
 	cout << "Sleeping for a while...\n";
 
-	bool bDone = false;
 	UINT8 currentBuffer = 0;
 
-	while (!bDone)
+	try 
 	{
-		DWORD dwResult = WaitForSingleObject(audioEvent, 20000);
-		if (dwResult == WAIT_OBJECT_0)
+		while (gStillPlaying)
 		{
-			//cout << "Event triggered!\n";
-			if (headers[gNextBuffer].dwFlags & WHDR_DONE) {
-				//cout << "    Refilling buffer #" << gNextBuffer;
-				FillBuffer(gAudioBuffers[gNextBuffer]);
-				result = waveOutWrite(audioDevice, &headers[gNextBuffer], sizeof(WAVEHDR));
-				if (result != MMSYSERR_NOERROR)
-				{
-					cout << "Failed to write buffer " << gNextBuffer;
-					PrintResult(result);
-					return -1;
-				}
-
-				gNextBuffer++;
-				gNextBuffer %= 2;
-			}
-			else 
+			DWORD dwResult = WaitForSingleObject(audioEvent, 20000);
+			if (dwResult == WAIT_OBJECT_0)
 			{
-				cout << "Event triggered--flags are 0x" << std::hex << headers[gNextBuffer].dwFlags << std::dec;
+				//cout << "Event triggered!\n";
+				if (headers[gNextBuffer].dwFlags & WHDR_DONE) {
+					//cout << "    Refilling buffer #" << gNextBuffer;
+					FillBuffer(gAudioBuffers[gNextBuffer]);
+					result = waveOutWrite(audioDevice, &headers[gNextBuffer], sizeof(WAVEHDR));
+					if (result != MMSYSERR_NOERROR)
+					{
+						cout << "Failed to write buffer " << gNextBuffer;
+						PrintResult(result);
+						return -1;
+					}
+
+					gNextBuffer++;
+					gNextBuffer %= 2;
+				}
+				else
+				{
+					cout << "Event triggered--flags are 0x" << std::hex << headers[gNextBuffer].dwFlags << std::dec;
+				}
 			}
+			else if (dwResult == WAIT_ABANDONED)
+			{
+				cout << "Wait abandoned\n";
+				gStillPlaying = false;
+			}
+			else if (dwResult == WAIT_TIMEOUT)
+			{
+				cout << "Timeout waiting for buffer\n";
+				gStillPlaying = false;
+			}
+			else if (dwResult == WAIT_FAILED)
+			{
+				cout << "Wait failed. Error: 0x" << std::hex << GetLastError() << std::dec << "\n";
+				gStillPlaying = false;
+			}
+			ResetEvent(audioEvent);
 		}
-		else if (dwResult == WAIT_ABANDONED) 
-		{
-			cout << "Wait abandoned\n";
-			bDone = true;
-		}
-		else if (dwResult == WAIT_TIMEOUT) 
-		{
-			cout << "Timeout waiting for buffer\n";
-			bDone = true;
-		}
-		else if (dwResult == WAIT_FAILED) 
-		{
-			cout << "Wait failed. Error: 0x" << std::hex << GetLastError() << std::dec << "\n";
-			bDone = true;
-		}
-		ResetEvent(audioEvent);
+	}
+	catch (int code) 
+	{
+		printf("Exception caught: 0x%08X", code);
 	}
 
 	waveOutUnprepareHeader(audioDevice, &headers[0], 0);

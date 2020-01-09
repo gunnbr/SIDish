@@ -5,13 +5,14 @@
 
 #ifdef WIN32
 #include <stdint.h>
-#include "tables.h"
 #include "sidish.h"
 
 uint32_t pgm_read_dword(const char *);
 uint16_t pgm_read_word(const uint32_t *);
 uint8_t pgm_read_byte(const char *);
 #endif
+
+#include "sid.h"
 
 uint8_t gNextOutputValue = 0;
 
@@ -31,69 +32,6 @@ const char *orderlist[MAX_SUBTUNES][3];
 // TODO: Optimize memory usage by reducing this value.
 // This alone takes a lot of the available RAM on an ATmega328
 const char *pattern[256];
-
-// SID Registers
-// 16 bit FREQUENCY
-// 12 bit DUTY_CYCLE in SID, only 8 bits here
-// 8 bit CONTROL register
-// 8 bit ATTACK_DECAY
-// 8 bit SUSTAIN_RELEASE
-
-enum EnvelopePhase
-{
-    Off,
-    Attack,
-    Decay,
-    Sustain,
-    Release,
-};
-
-#define CONTROL_GATE            (0x01)
-#define CONTROL_SYNCHRONIZE     (0x02) // NOT IMPLEMENTED
-#define CONTROL_RING_MODULATION (0x04) // NOT IMPLEMENTED
-#define CONTROL_TESTBIT         (0x08) // NOT IMPLEMENTED
-#define CONTROL_TRIANGLE        (0x10)
-#define CONTROL_SAWTOOTH        (0x20)
-#define CONTROL_PULSE           (0x40)
-#define CONTROL_NOISE           (0x80)
-
-// Number of cycles between each modification of the fader
-// Based on the BITRATE and the times for the SID chip given in the SID Wizard documentation
-const uint16_t AttackCycles[16] = { 1, 4, 8, 12, 19, 28, 34, 40, 50, 125, 250, 400, 500, 1500, 2500, 4000 };
-const uint16_t DecayReleaseCycles[16] = { 3, 12, 24, 36, 57, 84, 102, 120, 150, 375, 750, 1200, 1500, 4500, 7500, 12000 };
-
-uint16_t gNoise = 0x42;
-
-struct Voice
-{
-    // The number of steps through the waveform for each cycle
-    // of the bitrate
-    uint16_t steps;
-
-    // The current accumulated position through the waveform
-    // High byte is the output value + 32
-    // Low byte is the accumulated error offset (essentially a fixed decimal point value)
-    uint16_t tableOffset;
-
-    // Envelope values
-    uint8_t attackDecay;
-    uint8_t sustainRelease;
-
-    // Current phase in the envelope generator
-    enum EnvelopePhase envelopePhase;
-
-    // Cycles remaining until we adjust the fadeAmount
-    uint16_t phaseStepCountdown;
-    
-    // Amount to fade the current value (based on the current position in the ADSR envelope)
-    uint8_t fadeAmount;
-    
-    // Control bits (defined above)
-    uint8_t control;
-
-    // Pulse values
-    uint16_t pulseWidth;
-} channels[4];
 
 // Instrument definition
 struct Instrument
@@ -172,6 +110,36 @@ struct Track
 // Start of the song data -- only needed for testing 
 // by printing the offsets
 const char *gSongData;
+
+// TODO: Convert this to a single 16 byte value, then
+//       move it to PROGMEM
+unsigned char freqtbllo[] = {
+  0x17,0x27,0x39,0x4b,0x5f,0x74,0x8a,0xa1,0xba,0xd4,0xf0,0x0e,
+  0x2d,0x4e,0x71,0x96,0xbe,0xe8,0x14,0x43,0x74,0xa9,0xe1,0x1c,
+  0x5a,0x9c,0xe2,0x2d,0x7c,0xcf,0x28,0x85,0xe8,0x52,0xc1,0x37,
+  0xb4,0x39,0xc5,0x5a,0xf7,0x9e,0x4f,0x0a,0xd1,0xa3,0x82,0x6e,
+  0x68,0x71,0x8a,0xb3,0xee,0x3c,0x9e,0x15,0xa2,0x46,0x04,0xdc,
+  0xd0,0xe2,0x14,0x67,0xdd,0x79,0x3c,0x29,0x44,0x8d,0x08,0xb8,
+  0xa1,0xc5,0x28,0xcd,0xba,0xf1,0x78,0x53,0x87,0x1a,0x10,0x71,
+  0x42,0x89,0x4f,0x9b,0x74,0xe2,0xf0,0xa6,0x0e,0x33,0x20,0xff,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 };
+
+unsigned char freqtblhi[] = {
+  0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x02,
+  0x02,0x02,0x02,0x02,0x02,0x02,0x03,0x03,0x03,0x03,0x03,0x04,
+  0x04,0x04,0x04,0x05,0x05,0x05,0x06,0x06,0x06,0x07,0x07,0x08,
+  0x08,0x09,0x09,0x0a,0x0a,0x0b,0x0c,0x0d,0x0d,0x0e,0x0f,0x10,
+  0x11,0x12,0x13,0x14,0x15,0x17,0x18,0x1a,0x1b,0x1d,0x1f,0x20,
+  0x22,0x24,0x27,0x29,0x2b,0x2e,0x31,0x34,0x37,0x3a,0x3e,0x41,
+  0x45,0x49,0x4e,0x52,0x57,0x5c,0x62,0x68,0x6e,0x75,0x7c,0x83,
+  0x8b,0x93,0x9c,0xa5,0xaf,0xb9,0xc4,0xd0,0xdd,0xea,0xf8,0xff,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 };
 
 int InitializeSong(const char *songdata)
 {
@@ -421,12 +389,12 @@ void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
     print8int(key);
 #endif
 
-    channels[channel].attackDecay = pgm_read_byte(&gInstruments[instrument].attackDecay);
-    channels[channel].sustainRelease = pgm_read_byte(&gInstruments[instrument].sustainRelease);
-    channels[channel].fadeAmount = 32;
-    channels[channel].phaseStepCountdown = AttackCycles[(channels[channel].attackDecay & 0xF0) >> 4];
-    channels[channel].envelopePhase = Off;
-    
+    uint8_t value = pgm_read_byte(&gInstruments[instrument].attackDecay);
+    SetSidRegister(channel, AttackDecay, value);
+
+    value = pgm_read_byte(&gInstruments[instrument].sustainRelease);
+    SetSidRegister(channel, SustainRelease, value);
+
     gTrackData[channel].instrumentNumber = instrument;
     gTrackData[channel].originalNote = key;
     
@@ -457,13 +425,6 @@ void KeyOn(uint8_t channel, uint8_t key, uint8_t instrument)
 
     //printf("Instrument %u: AD: 0x%02X SR: 0x%02X ", instrument, channels[channel].attackDecay, channels[channel].sustainRelease);
     //printf("Key On: %u Attack Countdown: %u\n", key, channels[channel].phaseStepCountdown);
-}
-
-void KeyOff(uint8_t channel)
-{
-    //printf("KeyOff(%u)\n", channel);
-    channels[channel].envelopePhase = Release;
-    channels[channel].phaseStepCountdown = DecayReleaseCycles[channels[channel].sustainRelease & 0x0F];
 }
 
 // Returns TRUE when the song is finished
@@ -523,11 +484,11 @@ int GoatPlayerTick()
             {
                 // If the left side is 0, process the right side
                 // according to the previous left side
-                leftSide = channels[channel].control; 
+                leftSide = GetSidRegister(channel, Control); 
             }
             else
             {
-                channels[channel].control = leftSide;
+                SetSidRegister(channel, Control, leftSide);
             }
             
             // TODO: Find a way to combine waveforms.
@@ -556,10 +517,8 @@ int GoatPlayerTick()
                     gTrackData[channel].currentNote = rightSide - 0x81;
                 }
 
-                //printf("Setting steps for SAWTRI, note %d\n", gTrackData[channel].currentNote);
-                
-                channels[channel].steps = pgm_read_word(&SAWTOOTH_TABLE[gTrackData[channel].currentNote]);
-                channels[channel].tableOffset = 0;
+                uint16_t frequency = freqtbllo[gTrackData[channel].currentNote] | (freqtblhi[gTrackData[channel].currentNote] << 8);
+                SetSidRegister(channel, Frequency, frequency);
             }
             
             if (leftSide & CONTROL_PULSE)
@@ -582,29 +541,8 @@ int GoatPlayerTick()
                     gTrackData[channel].currentNote = rightSide - 0x81;
                 }
                 
-                //printf("Setting steps for PULSE, note %d\n", gTrackData[channel].currentNote);
-                
-                // Use the same table. We'll multiply the pulsetable value by 4 to scale
-                // it from 16.00 to 64.00
-                channels[channel].steps = pgm_read_word(&SAWTOOTH_TABLE[gTrackData[channel].currentNote]);
-                channels[channel].tableOffset = 0;
-            }
-
-            // TODO: Move all the handline of what happens with the
-            //       GATE to be in the SIDish part, not the player part
-            if (leftSide & CONTROL_GATE)
-            {
-                if (channels[channel].envelopePhase == Off)
-                {
-                    channels[channel].envelopePhase = Attack;
-                }
-            }
-            else
-            {
-                if (channels[channel].envelopePhase != Off)
-                {
-                    KeyOff(channel);
-                }    
+                uint16_t frequency = freqtbllo[gTrackData[channel].currentNote] | (freqtblhi[gTrackData[channel].currentNote] << 8);
+                SetSidRegister(channel, Frequency, frequency);
             }
         }
         else if (leftSide == 0xFF)
@@ -644,7 +582,9 @@ int GoatPlayerTick()
         
         if (gTrackData[channel].pulseRepeatCountdown > 0)
         {
-            channels[channel].pulseWidth += gTrackData[channel].pulseChange; 
+            uint8_t pulseWidth = GetSidRegister(channel, PulseWidth);
+            pulseWidth += gTrackData[channel].pulseChange;
+            SetSidRegister(channel, PulseWidth, pulseWidth);
             gTrackData[channel].pulseRepeatCountdown--;
             //printf("Channel %u changing pulse by %d to %u\n", channel, gTrackData[channel].pulseChange, channels[channel].pulseWidth);
             continue;
@@ -701,7 +641,7 @@ int GoatPlayerTick()
         else
         {
             // Directly set the pulse width
-            channels[channel].pulseWidth = ((leftSide & 0x0F) << 8) | rightSide;
+            SetSidRegister(channel, PulseWidth, ((leftSide & 0x0F) << 8) | rightSide);
 #if 0
             print("Set pulsewidth to 0x");
             print8hex(leftSide & 0x0F);
@@ -781,7 +721,8 @@ int GoatPlayerTick()
             }
             else if (note == 0xBE)
             {
-                KeyOff(channel);
+                uint8_t value = GetSidRegister(channel, Control);
+                SetSidRegister(channel, Control, value & ~CONTROL_GATE);
             }
             else if (note == 0xFF)
             {
@@ -867,185 +808,8 @@ int OutputAudioAndCalculateNextByte(void)
 {
     OutputByte(gNextOutputValue);
 
-    int8_t outputValue = 0;
-    int8_t wrap = 0;
-    
-    // 4 channels are actually supported, but since GoatTracker
-    // only supports 3 and I need more cycles, only process 3
-    // of them.
-    
-    for (uint8_t channel = 0 ; channel < 3 ; channel++)
-    {
-        uint16_t bit = ((gNoise >> 0) ^ (gNoise >> 2) ^ (gNoise >> 3) ^ (gNoise >> 5)) & 1;
-        gNoise = (gNoise >> 1) | (bit << 15);
+    gNextOutputValue = GetNextSample();
 
-        // printf("Noise: 0x%02X ", gNoise);
-        
-        if (channels[channel].envelopePhase != Off)
-        {
-            uint16_t offset = channels[channel].tableOffset >> 8;
-            //printf("Offset: 0x%04X ", offset);
-            
-            if (offset >= 64)
-            {
-                offset -= 64;
-                channels[channel].tableOffset &= 0xFF;
-                channels[channel].tableOffset |= offset << 8;
-                wrap = 1;
-            }
-
-            int8_t waveformValue;
-            
-            if (channels[channel].control & CONTROL_SAWTOOTH)
-            {
-                waveformValue = offset - 32;
-                //printf(" SAWTOOTH (%u): %d\n", channel, waveformValue);
-            }
-            else if (channels[channel].control & CONTROL_TRIANGLE)
-            {
-                waveformValue = offset * 2;
-                if (waveformValue >= 64)
-                {
-                    waveformValue = 128 - waveformValue;
-                }
-                waveformValue -= 32;
-                //printf(" TRIANGLE (%u): %d\n", channel, waveformValue);
-            }
-            else if (channels[channel].control & CONTROL_PULSE)
-            {
-                if (wrap)
-                {
-                    waveformValue = 31;
-                }
-                else if (channels[channel].tableOffset >= channels[channel].pulseWidth)
-                {
-                    waveformValue = -32;
-                }
-                else
-                {
-                    waveformValue = 31;
-                }
-                //printf(" PULSE (%u): offset: %u pulseWidth: %u %d\n", channel, channels[channel].tableOffset, channels[channel].pulseWidth, waveformValue);
-            }
-            else if (channels[channel].control & CONTROL_NOISE)
-            {
-                waveformValue = (gNoise & 0x3F) - 32;
-                //printf(" NOISE (%u): %d\n", channel, waveformValue);
-            }
-            else
-            {
-                waveformValue = 0;
-            }
-            
-            int16_t shortWaveformValue = (int16_t)waveformValue;
-            int8_t fadedValue = (int8_t) (shortWaveformValue * (32 - channels[channel].fadeAmount) / 32);
-            //printf("waveform: %3d short: %3d fadeAmount: %2u phase: %d faded: %3d\n",
-            //        waveformValue, shortWaveformValue, channels[channel].fadeAmount, channels[channel].envelopePhase, fadedValue);
-            
-            //printf(" Faded: %d\n", fadedValue);
-            outputValue += fadedValue;
-            
-            channels[channel].phaseStepCountdown--;
-            if (channels[channel].phaseStepCountdown == 0)
-            {
-                // TODO: Parse out and save the A D S R values ahead of time and store
-                // in the struct so we don't have to do it a lot here?
-                switch (channels[channel].envelopePhase)
-                {
-                case Attack:
-                    if (channels[channel].fadeAmount <= 0)
-                    {
-                        //printf("Done attacking. SR = 0x%02X\n", channels[channel].sustainRelease);
-                        uint8_t sustainLevel = (channels[channel].sustainRelease & 0xF0) >> 4;
-                        //printf("SustainLevel = %u\n", sustainLevel);
-                        uint8_t sustainFadeValue = 0x0F - sustainLevel;
-                        sustainFadeValue <<= 1;
-                        
-                        //printf("FadeValue = %u\n", sustainFadeValue);
-                        if (sustainFadeValue > 0)
-                        {
-                            //printf("Switching to decay\n");
-                            // TODO: Figure out exactly how the decay works. Is it "X ms" to decay from the
-                            //       maximum to the sustain value or is it "X ms" total if we were decaying
-                            //       to the minimum?
-                            channels[channel].envelopePhase = Decay;
-                            channels[channel].phaseStepCountdown = DecayReleaseCycles[channels[channel].attackDecay & 0x0F];
-                        }
-                        else
-                        {
-                            //printf("Switching to Sustain.\n");
-                            channels[channel].envelopePhase = Sustain;
-                        }
-                    }
-                    else
-                    {
-                        channels[channel].fadeAmount--;
-                        channels[channel].phaseStepCountdown = AttackCycles[(channels[channel].attackDecay & 0xF0) >> 4];
-                    }
-                    break;
-
-                case Decay:
-                    {
-                        uint8_t sustainFadeValue = 0x0F - ((channels[channel].sustainRelease & 0xF0) >> 4);
-                        sustainFadeValue <<= 1;
-#if 0
-                        print("SR: ");
-                        print8hex(channels[channel].sustainRelease);
-                        print(" sFV: ");
-                        print8hex(sustainFadeValue);
-                        print("\n");
-#endif
-                        
-                        // Decaying from the maximum value to the sustain level
-                    
-                        if (channels[channel].fadeAmount >= sustainFadeValue)
-                        {
-                            channels[channel].envelopePhase = Sustain;
-                            // TODO: Really should just disable the phaseCountdown here, but it doesn't entirely
-                            //       matter since it just wraps around only calling Sustain every 65536 loops.
-                        }
-                        else
-                        {
-                            channels[channel].fadeAmount++;
-                            channels[channel].phaseStepCountdown = DecayReleaseCycles[channels[channel].attackDecay & 0x0F];
-                        }
-                    }
-                    break;
-
-                case Sustain:
-                    // Do nothing. Just sustain
-                    break;
-
-                case Release:
-                    // Fade from the sustain level to 0 (fadeAmount of 32)
-                    channels[channel].fadeAmount++;
-                    if (channels[channel].fadeAmount >= 32)
-                    {
-                        channels[channel].envelopePhase = Off;
-                    }
-                    else
-                    {
-                        channels[channel].phaseStepCountdown = DecayReleaseCycles[channels[channel].sustainRelease & 0x0F];
-                    }
-                    break;
-
-                case Off:
-                    // Doesn't need to be here except to avoid the compiler warning
-                    break;
-                }
-            }
-
-            //printf("Channel %u Offset: 0x%04X + Steps: 0x%04X = ", channel, channels[channel].tableOffset, channels[channel].steps);
-            channels[channel].tableOffset += channels[channel].steps;
-            //printf("0x%04X ", channels[channel].tableOffset);
-        }
-    }  
-    
-    // Scale -128 to 128 values to 0 to 255
-    //printf("Output: %d\n", outputValue);
-    gNextOutputValue = (uint8_t)((int16_t)outputValue + 128);
-    //printf("Next output 0x%02X\n", gNextOutputValue);
-    
 #if !TEST_MODE
     vbiCount--;
     if (vbiCount == 0)
